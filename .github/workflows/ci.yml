@@ -64,8 +64,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install cbindgen
-        run: cargo install cbindgen --locked
+      - name: Install cbindgen (pinned to the version that generated the committed header)
+        run: cargo install cbindgen --locked --version 0.29.4
       - name: Header is current (regenerate must not diff)
         run: |
           cbindgen --config vortexpak_native/cbindgen.toml --crate vortexpak_native --output vortexpak_native/vortexpak.h
