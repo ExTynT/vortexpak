@@ -49,11 +49,11 @@ GPU texture lane (3 585 textures, 183 MB, `--gpu auto` = BC7 for alpha content, 
 
 | Config | PSNR avg | PSNR worst | FLIP avg | FLIP worst | Speed |
 |---|---:|---:|---:|---:|---:|
-| BC1 MAX | 36.1 dB | 22.2 dB | 0.027 | 0.041 | 5.3 s |
-| BC1 MAX + RDO | **37.4 dB** | **33.1 dB** | **0.026** | **0.041** | 21.6 s |
-| BC7 (mode 6) | **38.0 dB** | 33.3 dB | **0.024** | **0.038** | 1.3 s |
+| BC1 MAX | 36.1 dB | 22.2 dB | 0.027 | 0.041 | 5.1 s |
+| BC1 MAX + RDO | **37.4 dB** | **33.1 dB** | 0.026 | 0.041 | 21.4 s |
+| BC7 + APR | **40.5 dB** | **36.1 dB** | **0.022** | **0.032** | 1.7 s |
 
-All configurations are well below the 0.10 FLIP visible-artifact threshold. RDO improves worst-case PSNR by +10.9 dB over plain MAX.
+All configurations are well below the 0.10 FLIP visible-artifact threshold. RDO improves worst-case PSNR by +10.9 dB over plain MAX. **APR (Adaptive Partition Refinement)** — a proprietary 2-subset mode with 8 geometric partition patterns — lifts BC7 by +2.4 dB avg / +2.9 dB worst over single-subset mode 6.
 
 ![Kodak quality](benchmarks/charts/kodak_quality.png)
 
