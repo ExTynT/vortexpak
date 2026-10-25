@@ -31,11 +31,10 @@ import io
 import json
 import math
 import struct
-import zlib
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import lz4.frame
 import numpy as np
@@ -49,7 +48,6 @@ from .native import (
     native_alpha_strip_unpack,
     native_decode_archive_parallel,
     native_decode_single_texture_vxtx,
-    native_decompress_block,
     native_decompress_blocks_parallel,
     native_is_all_opaque,
     native_planar_decode,
@@ -360,7 +358,7 @@ def parse_vpk_meta(meta_comp: bytes) -> Tuple[dict, tuple]:
     for idx, row in enumerate(entry_rows):
         if not isinstance(row, list) or len(row) != 14:
             raise VXPKError(
-                f"entry #{idx} is malformed: expected 14 fields, got {len(row) if isinstance(row, list) else type(row).__name__}"
+                f"entry #{idx} is malformed: expected 14 fields, got {len(row) if isinstance(row, list) else type(row).__name__}"  # noqa: E501
             )
         block_id = row[7]
         aux_block_id = row[10]
@@ -411,7 +409,7 @@ def parse_vpk_meta(meta_comp: bytes) -> Tuple[dict, tuple]:
     for brow in header_dict["blocks"]:
         if not isinstance(brow, list) or len(brow) not in (7, 8):
             raise VXPKError(
-                f"block header is malformed: expected 7 or 8 fields, got {len(brow) if isinstance(brow, list) else type(brow).__name__}"
+                f"block header is malformed: expected 7 or 8 fields, got {len(brow) if isinstance(brow, list) else type(brow).__name__}"  # noqa: E501
             )
         b_id, lane_name, strat_id, raw_sz, comp_sz, pat_hex, tok_hex = brow[:7]
         if not isinstance(lane_name, str):
@@ -797,7 +795,7 @@ def _encode_texture_gpu(
 def _apply_lane_dictionaries(
     blocks: List[MicroBlock],
     lane_groups: Dict[str, List[Tuple[int, bytes]]],
-    lane_samples: Dict[str, List[bytes]] = None,
+    lane_samples: Optional[Dict[str, List[bytes]]] = None,
 ) -> List[MicroBlock]:
     """Lane-dictionary RDSO: repetitive text lanes get a dictionary trained on
     the lane's own content, stored once as a normal block; every lane block is
@@ -957,9 +955,9 @@ class VortexPakCodec:
         self.entropy_backend = entropy_backend
         self.gpu = gpu
         self._pool = ThreadPoolExecutor(max_workers=max_workers)
-        self.last_rdo_metrics: Dict[str, float] = {}
+        self.last_rdo_metrics: Dict[str, Any] = {}
 
-    def get_rdo_metrics(self) -> Dict[str, float]:
+    def get_rdo_metrics(self) -> Dict[str, Any]:
         return self.last_rdo_metrics
 
     def encode_directory(self, root_dir: Path) -> VortexArchive:
@@ -1194,7 +1192,7 @@ class VortexPakCodec:
         for entry, raw_b in lane_maps_large:
             n_stripes = max(8, -(-len(raw_b) // TARGET_BLOCK_BYTES))
             step = (len(raw_b) + n_stripes - 1) // n_stripes
-            spans: List[Tuple[int, int, int]] = []
+            spans = []
             for s_idx in range(n_stripes):
                 part = raw_b[s_idx * step : (s_idx + 1) * step]
                 if not part:

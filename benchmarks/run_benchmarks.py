@@ -47,7 +47,6 @@ from vortexpak.codec import (
     STRAT_LZ4_FAST,
     STRAT_VXLZ,
     STRAT_ZSTD_3,
-    STRAT_ZSTD_6,
     MicroBlock,
 )
 from vortexpak.native import native_decompress_blocks_parallel, native_vxlz_compress
@@ -60,18 +59,26 @@ from vortexpak.rdo import (
 
 
 def load_game_files(root_dir: Path) -> List[Tuple[str, bytes]]:
-    files = sorted([p for p in root_dir.rglob("*") if p.is_file() and ".git" not in p.parts])
-    return [(str(p.relative_to(root_dir)).replace("\\", "/"), p.read_bytes()) for p in files]
+    files = sorted(
+        [p for p in root_dir.rglob("*") if p.is_file() and ".git" not in p.parts]
+    )
+    return [
+        (str(p.relative_to(root_dir)).replace("\\", "/"), p.read_bytes()) for p in files
+    ]
 
 
-def measure_png_decode_time(file_tuples: List[Tuple[str, bytes]]) -> Tuple[float, float, int, int]:
+def measure_png_decode_time(
+    file_tuples: List[Tuple[str, bytes]],
+) -> Tuple[float, float, int, int]:
     """
     Measure time required for a game engine to decode PNG containers into GPU-ready RGBA/RGB arrays
     across 8 parallel threads using C libpng (Pillow).
     Returns (min_sec, median_sec, total_uncompressed_pixel_bytes, total_non_png_bytes).
     """
     png_blobs = [b for rel, b in file_tuples if rel.lower().endswith(".png")]
-    non_png_bytes = sum(len(b) for rel, b in file_tuples if not rel.lower().endswith(".png"))
+    non_png_bytes = sum(
+        len(b) for rel, b in file_tuples if not rel.lower().endswith(".png")
+    )
 
     def _dec_png(b: bytes) -> np.ndarray:
         return np.array(Image.open(io.BytesIO(b)), dtype=np.uint8)
@@ -171,7 +178,11 @@ def benchmark_parallel_chunked_codec(
     idx_overhead = len(file_tuples) * 8 + num_chunks * 16
 
     step = (total_raw + num_chunks - 1) // num_chunks
-    raw_chunks = [raw_concat[i * step : (i + 1) * step] for i in range(num_chunks) if raw_concat[i * step : (i + 1) * step]]
+    raw_chunks = [
+        raw_concat[i * step : (i + 1) * step]
+        for i in range(num_chunks)
+        if raw_concat[i * step : (i + 1) * step]
+    ]
 
     t0 = time.perf_counter()
     with ThreadPoolExecutor(max_workers=num_chunks) as ex:
@@ -260,7 +271,9 @@ def benchmark_raw_pixels_ablation_zstd9(
                     raw_b, _ = quantize_blend_rdo(raw_b, drop_bits=12)
                 elif ext == ".obj":
                     try:
-                        txt, _ = quantize_obj_rdo(raw_b.decode("utf-8", errors="ignore"))
+                        txt, _ = quantize_obj_rdo(
+                            raw_b.decode("utf-8", errors="ignore")
+                        )
                         raw_b = txt.encode("utf-8")
                     except Exception:
                         pass
@@ -268,11 +281,19 @@ def benchmark_raw_pixels_ablation_zstd9(
 
     raw_concat = b"".join(raw_items)
     step = (len(raw_concat) + num_chunks - 1) // num_chunks
-    raw_chunks = [raw_concat[i * step : (i + 1) * step] for i in range(num_chunks) if raw_concat[i * step : (i + 1) * step]]
+    raw_chunks = [
+        raw_concat[i * step : (i + 1) * step]
+        for i in range(num_chunks)
+        if raw_concat[i * step : (i + 1) * step]
+    ]
 
-    cctx_fn = lambda x: zstd.ZstdCompressor(level=9).compress(x)
+    def cctx_fn(x):
+        return zstd.ZstdCompressor(level=9).compress(x)
+
     with ThreadPoolExecutor(max_workers=8) as ex:
-        comp_chunks = list(ex.map(cctx_fn, raw_chunks))
+        comp_chunks = list(
+            ex.map(cctx_fn if "cctx_fn" in dir() else cctx_fn, raw_chunks)
+        )
     t_enc = time.perf_counter() - t0
     comp_size = sum(len(c) for c in comp_chunks) + idx_overhead
 
@@ -352,11 +373,17 @@ def benchmark_webp_lossless_zstd9(
     webp_blobs = [b for rel, b in webp_tuples if rel.lower().endswith(".png")]
     raw_concat = b"".join(b for _, b in webp_tuples)
     step = (len(raw_concat) + num_chunks - 1) // num_chunks
-    raw_chunks = [raw_concat[i * step : (i + 1) * step] for i in range(num_chunks) if raw_concat[i * step : (i + 1) * step]]
+    raw_chunks = [
+        raw_concat[i * step : (i + 1) * step]
+        for i in range(num_chunks)
+        if raw_concat[i * step : (i + 1) * step]
+    ]
 
-    cctx_fn = lambda x: zstd.ZstdCompressor(level=9).compress(x)
+    def cctx_fn2(x):
+        return zstd.ZstdCompressor(level=9).compress(x)
+
     with ThreadPoolExecutor(max_workers=8) as ex:
-        comp_chunks = list(ex.map(cctx_fn, raw_chunks))
+        comp_chunks = list(ex.map(cctx_fn2, raw_chunks))
     t_enc = time.perf_counter() - t0
     comp_size = sum(len(c) for c in comp_chunks) + idx_overhead
 
@@ -483,7 +510,9 @@ def benchmark_vortexpak(
     entropy_backend: str = "vxlz",
     repeats: int = 9,
 ) -> Dict[str, Any]:
-    codec = VortexPakCodec(mode=mode, rdo=rdo, max_workers=8, entropy_backend=entropy_backend)
+    codec = VortexPakCodec(
+        mode=mode, rdo=rdo, max_workers=8, entropy_backend=entropy_backend
+    )
     t0 = time.perf_counter()
     arch = codec.encode_files(file_tuples)
     blob = arch.to_bytes()
@@ -562,8 +591,12 @@ def run_suite_for_corpus(
     include_ablation: bool = True,
 ) -> List[Dict[str, Any]]:
     gc.collect()
-    print(f"\n>>> Running Brutal Benchmark Suite on [{corpus_name}] ({len(file_tuples):,d} files) <<<")
-    png_min_sec, png_med_sec, total_pix_bytes, non_png_bytes = measure_png_decode_time(file_tuples)
+    print(
+        f"\n>>> Running Brutal Benchmark Suite on [{corpus_name}] ({len(file_tuples):,d} files) <<<"
+    )
+    png_min_sec, png_med_sec, total_pix_bytes, non_png_bytes = measure_png_decode_time(
+        file_tuples
+    )
     total_gpu_bytes = total_pix_bytes + non_png_bytes
     print(
         f"    Parallel 8-Thread PNG->GPU Decode Baseline ({total_pix_bytes/1e6:.2f} MB pixels, "
@@ -574,56 +607,134 @@ def run_suite_for_corpus(
 
     # 1. Per-file baselines (1-Thread)
     for name, cfn, dfn in [
-        ("Per-File LZ4", lambda x: lz4.frame.compress(x), lambda x: lz4.frame.decompress(x)),
-        ("Per-File ZIP/Zlib-6", lambda x: zlib.compress(x, 6), lambda x: zlib.decompress(x)),
-        ("Per-File Zstd-3", lambda x: zstd.ZstdCompressor(level=3).compress(x), lambda x: zstd.ZstdDecompressor().decompress(x)),
-        ("Per-File Zstd-9", lambda x: zstd.ZstdCompressor(level=9).compress(x), lambda x: zstd.ZstdDecompressor().decompress(x)),
+        (
+            "Per-File LZ4",
+            lambda x: lz4.frame.compress(x),
+            lambda x: lz4.frame.decompress(x),
+        ),
+        (
+            "Per-File ZIP/Zlib-6",
+            lambda x: zlib.compress(x, 6),
+            lambda x: zlib.decompress(x),
+        ),
+        (
+            "Per-File Zstd-3",
+            lambda x: zstd.ZstdCompressor(level=3).compress(x),
+            lambda x: zstd.ZstdDecompressor().decompress(x),
+        ),
+        (
+            "Per-File Zstd-9",
+            lambda x: zstd.ZstdCompressor(level=9).compress(x),
+            lambda x: zstd.ZstdDecompressor().decompress(x),
+        ),
     ]:
-        r = benchmark_per_file_codec(name, file_tuples, cfn, dfn, png_min_sec, png_med_sec, total_gpu_bytes)
+        r = benchmark_per_file_codec(
+            name, file_tuples, cfn, dfn, png_min_sec, png_med_sec, total_gpu_bytes
+        )
         results.append(r)
-        print(f"  {r['codec']:34s} | {r['compressed_bytes']:10,d} B ({r['pct_of_raw']:5.2f}%) | Unpack: {r['decode_ms']:6.2f} ms (med {r['decode_median_ms']:6.2f}) | GPU-Ready: {r['gpu_ready_ms']:6.2f} ms")
+        print(
+            f"  {r['codec']:34s} | {r['compressed_bytes']:10,d} B ({r['pct_of_raw']:5.2f}%) | Unpack:{r['decode_ms']:6.2f} ms (med {r['decode_median_ms']:6.2f}) | GPU-Ready: {r['gpu_ready_ms']:6.2f} ms"
+        )
 
     # 2. Solid baselines (1-Thread)
     solid_specs = [
-        ("Solid LZ4", lambda x: lz4.frame.compress(x), lambda x: lz4.frame.decompress(x)),
+        (
+            "Solid LZ4",
+            lambda x: lz4.frame.compress(x),
+            lambda x: lz4.frame.decompress(x),
+        ),
         ("Solid Zlib-6", lambda x: zlib.compress(x, 6), lambda x: zlib.decompress(x)),
-        ("Solid Zstd-3", lambda x: zstd.ZstdCompressor(level=3).compress(x), lambda x: zstd.ZstdDecompressor().decompress(x)),
-        ("Solid Zstd-9", lambda x: zstd.ZstdCompressor(level=9).compress(x), lambda x: zstd.ZstdDecompressor().decompress(x)),
-        ("Solid Zstd-19 (Ultra)", lambda x: zstd.ZstdCompressor(level=19, threads=-1).compress(x), lambda x: zstd.ZstdDecompressor().decompress(x)),
-        ("Solid Brotli-6", lambda x: brotli.compress(x, quality=6), lambda x: brotli.decompress(x)),
+        (
+            "Solid Zstd-3",
+            lambda x: zstd.ZstdCompressor(level=3).compress(x),
+            lambda x: zstd.ZstdDecompressor().decompress(x),
+        ),
+        (
+            "Solid Zstd-9",
+            lambda x: zstd.ZstdCompressor(level=9).compress(x),
+            lambda x: zstd.ZstdDecompressor().decompress(x),
+        ),
+        (
+            "Solid Zstd-19 (Ultra)",
+            lambda x: zstd.ZstdCompressor(level=19, threads=-1).compress(x),
+            lambda x: zstd.ZstdDecompressor().decompress(x),
+        ),
+        (
+            "Solid Brotli-6",
+            lambda x: brotli.compress(x, quality=6),
+            lambda x: brotli.decompress(x),
+        ),
     ]
     if include_slow:
-        solid_specs.append(("Solid LZMA (7z/XZ)", lambda x: lzma.compress(x, preset=6), lambda x: lzma.decompress(x)))
+        solid_specs.append(
+            (
+                "Solid LZMA (7z/XZ)",
+                lambda x: lzma.compress(x, preset=6),
+                lambda x: lzma.decompress(x),
+            )
+        )
 
     for name, cfn, dfn in solid_specs:
-        r = benchmark_solid_codec(name, file_tuples, cfn, dfn, png_min_sec, png_med_sec, total_gpu_bytes)
+        r = benchmark_solid_codec(
+            name, file_tuples, cfn, dfn, png_min_sec, png_med_sec, total_gpu_bytes
+        )
         results.append(r)
-        print(f"  {r['codec']:34s} | {r['compressed_bytes']:10,d} B ({r['pct_of_raw']:5.2f}%) | Unpack: {r['decode_ms']:6.2f} ms (med {r['decode_median_ms']:6.2f}) | GPU-Ready: {r['gpu_ready_ms']:6.2f} ms")
+        print(
+            f"  {r['codec']:34s} | {r['compressed_bytes']:10,d} B ({r['pct_of_raw']:5.2f}%) | Unpack:{r['decode_ms']:6.2f} ms (med {r['decode_median_ms']:6.2f}) | GPU-Ready: {r['gpu_ready_ms']:6.2f} ms"
+        )
 
     # 3. 8-Core Parallel Chunked Competitors (running on the EXACT same Rust Rayon C-ABI engine!)
     for name, cfn, st_id in [
         ("Parallel-8T LZ4", lambda x: lz4.frame.compress(x), STRAT_LZ4_FAST),
-        ("Parallel-8T Zstd-3", lambda x: zstd.ZstdCompressor(level=3).compress(x), STRAT_ZSTD_3),
-        ("Parallel-8T Zstd-9", lambda x: zstd.ZstdCompressor(level=9).compress(x), STRAT_ZSTD_3),
-        ("Parallel-8T VXLZ-ANS (Proprietary)", lambda x: native_vxlz_compress(x), STRAT_VXLZ),
+        (
+            "Parallel-8T Zstd-3",
+            lambda x: zstd.ZstdCompressor(level=3).compress(x),
+            STRAT_ZSTD_3,
+        ),
+        (
+            "Parallel-8T Zstd-9",
+            lambda x: zstd.ZstdCompressor(level=9).compress(x),
+            STRAT_ZSTD_3,
+        ),
+        (
+            "Parallel-8T VXLZ-ANS (Proprietary)",
+            lambda x: native_vxlz_compress(x),
+            STRAT_VXLZ,
+        ),
     ]:
-        r = benchmark_parallel_chunked_codec(name, file_tuples, cfn, st_id, png_min_sec, png_med_sec, total_gpu_bytes)
+        r = benchmark_parallel_chunked_codec(
+            name, file_tuples, cfn, st_id, png_min_sec, png_med_sec, total_gpu_bytes
+        )
         results.append(r)
-        print(f"  {r['codec']:34s} | {r['compressed_bytes']:10,d} B ({r['pct_of_raw']:5.2f}%) | Unpack: {r['decode_ms']:6.2f} ms (med {r['decode_median_ms']:6.2f}) | GPU-Ready: {r['gpu_ready_ms']:6.2f} ms")
+        print(
+            f"  {r['codec']:34s} | {r['compressed_bytes']:10,d} B ({r['pct_of_raw']:5.2f}%) | Unpack:{r['decode_ms']:6.2f} ms (med {r['decode_median_ms']:6.2f}) | GPU-Ready: {r['gpu_ready_ms']:6.2f} ms"
+        )
 
     # 4. Ablation & Modern Image Baselines (Raw-Pixels + Zstd-9, WebP-Lossless + Zstd-9, RDO + Raw-Zstd-9)
     if include_ablation:
-        r_webp = benchmark_webp_lossless_zstd9("WebP-Lossless + Parallel-8T Zstd-9", file_tuples, total_gpu_bytes)
+        r_webp = benchmark_webp_lossless_zstd9(
+            "WebP-Lossless + Parallel-8T Zstd-9", file_tuples, total_gpu_bytes
+        )
         results.append(r_webp)
-        print(f"  {r_webp['codec']:34s} | {r_webp['compressed_bytes']:10,d} B ({r_webp['pct_of_raw']:5.2f}%) | Unpack: {r_webp['decode_ms']:6.2f} ms (med {r_webp['decode_median_ms']:6.2f}) | GPU-Ready: {r_webp['gpu_ready_ms']:6.2f} ms")
+        print(
+            f"  {r_webp['codec']:34s} | {r_webp['compressed_bytes']:10,d} B ({r_webp['pct_of_raw']:5.2f}%) |Unpack: {r_webp['decode_ms']:6.2f} ms (med {r_webp['decode_median_ms']:6.2f}) | GPU-Ready: {r_webp['gpu_ready_ms']:6.2f} ms"
+        )
 
-        r_raw_ab = benchmark_raw_pixels_ablation_zstd9("Parallel-8T Raw-Pixels + Zstd-9", file_tuples, total_gpu_bytes, rdo=False)
+        r_raw_ab = benchmark_raw_pixels_ablation_zstd9(
+            "Parallel-8T Raw-Pixels + Zstd-9", file_tuples, total_gpu_bytes, rdo=False
+        )
         results.append(r_raw_ab)
-        print(f"  {r_raw_ab['codec']:34s} | {r_raw_ab['compressed_bytes']:10,d} B ({r_raw_ab['pct_of_raw']:5.2f}%) | Unpack: {r_raw_ab['decode_ms']:6.2f} ms (med {r_raw_ab['decode_median_ms']:6.2f}) | GPU-Ready: {r_raw_ab['gpu_ready_ms']:6.2f} ms")
+        print(
+            f"  {r_raw_ab['codec']:34s} | {r_raw_ab['compressed_bytes']:10,d} B({r_raw_ab['pct_of_raw']:5.2f}%) | Unpack: {r_raw_ab['decode_ms']:6.2f} ms (med {r_raw_ab['decode_median_ms']:6.2f}) | GPU-Ready: {r_raw_ab['gpu_ready_ms']:6.2f} ms"
+        )
 
-        r_rdo_ab = benchmark_raw_pixels_ablation_zstd9("RDO-Quantized + Raw-Zstd-9 (8T)", file_tuples, total_gpu_bytes, rdo=True)
+        r_rdo_ab = benchmark_raw_pixels_ablation_zstd9(
+            "RDO-Quantized + Raw-Zstd-9 (8T)", file_tuples, total_gpu_bytes, rdo=True
+        )
         results.append(r_rdo_ab)
-        print(f"  {r_rdo_ab['codec']:34s} | {r_rdo_ab['compressed_bytes']:10,d} B ({r_rdo_ab['pct_of_raw']:5.2f}%) | Unpack: {r_rdo_ab['decode_ms']:6.2f} ms (med {r_rdo_ab['decode_median_ms']:6.2f}) | GPU-Ready: {r_rdo_ab['gpu_ready_ms']:6.2f} ms")
+        print(
+            f"  {r_rdo_ab['codec']:34s} | {r_rdo_ab['compressed_bytes']:10,d} B({r_rdo_ab['pct_of_raw']:5.2f}%) | Unpack: {r_rdo_ab['decode_ms']:6.2f} ms (med {r_rdo_ab['decode_median_ms']:6.2f}) | GPU-Ready: {r_rdo_ab['gpu_ready_ms']:6.2f} ms"
+        )
 
     # 5. Our Prototypes (VortexPak v2.0 — 100% Proprietary VXLZ-ANS & Zstd-RDSO)
     for name, mode, rdo_flag, backend in [
@@ -634,8 +745,14 @@ def run_suite_for_corpus(
         ("VortexPak-RDO (VXPK-Zstd)", "engine", True, "zstd"),
     ]:
         r = benchmark_vortexpak(
-            name, mode, file_tuples, png_min_sec, png_med_sec, total_gpu_bytes,
-            rdo=rdo_flag, entropy_backend=backend
+            name,
+            mode,
+            file_tuples,
+            png_min_sec,
+            png_med_sec,
+            total_gpu_bytes,
+            rdo=rdo_flag,
+            entropy_backend=backend,
         )
         results.append(r)
         extra_info = ""
@@ -734,12 +851,30 @@ def benchmark_competitor_random_seek(
         "per_file_zstd9_avg_ms": round(float(np.mean(pf_latencies_ms)), 3),
         "per_file_zstd9_median_ms": round(float(np.median(pf_latencies_ms)), 3),
         "per_file_zstd9_p95_ms": round(float(np.percentile(pf_latencies_ms, 95)), 3),
-        "per_file_tex_median_ms": round(float(np.median(pf_tex_latencies_ms)), 3) if pf_tex_latencies_ms else 0.0,
-        "per_file_tex_avg_ms": round(float(np.mean(pf_tex_latencies_ms)), 3) if pf_tex_latencies_ms else 0.0,
-        "per_file_small_median_ms": round(float(np.median(pf_small_latencies_ms)), 3) if pf_small_latencies_ms else 0.0,
-        "vfs_tex_cold_median_ms": round(float(np.median(vfs_tex_cold_ms)), 3) if vfs_tex_cold_ms else 0.0,
-        "vfs_tex_cold_avg_ms": round(float(np.mean(vfs_tex_cold_ms)), 3) if vfs_tex_cold_ms else 0.0,
-        "vfs_small_cold_median_ms": round(float(np.median(vfs_small_cold_ms)), 3) if vfs_small_cold_ms else 0.0,
+        "per_file_tex_median_ms": (
+            round(float(np.median(pf_tex_latencies_ms)), 3)
+            if pf_tex_latencies_ms
+            else 0.0
+        ),
+        "per_file_tex_avg_ms": (
+            round(float(np.mean(pf_tex_latencies_ms)), 3)
+            if pf_tex_latencies_ms
+            else 0.0
+        ),
+        "per_file_small_median_ms": (
+            round(float(np.median(pf_small_latencies_ms)), 3)
+            if pf_small_latencies_ms
+            else 0.0
+        ),
+        "vfs_tex_cold_median_ms": (
+            round(float(np.median(vfs_tex_cold_ms)), 3) if vfs_tex_cold_ms else 0.0
+        ),
+        "vfs_tex_cold_avg_ms": (
+            round(float(np.mean(vfs_tex_cold_ms)), 3) if vfs_tex_cold_ms else 0.0
+        ),
+        "vfs_small_cold_median_ms": (
+            round(float(np.median(vfs_small_cold_ms)), 3) if vfs_small_cold_ms else 0.0
+        ),
         "solid_zstd9_random_read_ms": round(solid_med_ms, 2),
     }
 
@@ -750,21 +885,31 @@ def main() -> None:
 
     for gname in ["minetest_game", "kenney_3d_platformer", "browserquest"]:
         ft = load_game_files(games_dir / gname)
-        all_suites[gname] = run_suite_for_corpus(gname, ft, include_slow=False, include_ablation=True)
+        all_suites[gname] = run_suite_for_corpus(
+            gname, ft, include_slow=False, include_ablation=True
+        )
 
     combined_ft = load_game_files(games_dir)
     all_suites["combined_all_3_games"] = run_suite_for_corpus(
-        "Combined All 3 OSS Games (82.93 MB)", combined_ft, include_slow=True, include_ablation=True
+        "Combined All 3 OSS Games (82.93 MB)",
+        combined_ft,
+        include_slow=True,
+        include_ablation=True,
     )
 
     # Outlier-Free Combined Corpus (Excludes the 67.2 MB BrowserQuest map.tmx XML outlier)
     no_tmx_ft = [item for item in combined_ft if not item[0].lower().endswith(".tmx")]
     all_suites["combined_no_tmx_outlier"] = run_suite_for_corpus(
-        "Combined Without 67MB Map Outlier (15.72 MB)", no_tmx_ft, include_slow=False, include_ablation=True
+        "Combined Without 67MB Map Outlier (15.72 MB)",
+        no_tmx_ft,
+        include_slow=False,
+        include_ablation=True,
     )
 
     # Brutal Seekable VFS On-Demand Streaming Benchmark on Combined Corpus
-    print("\n>>> Running Brutal Seekable VFS On-Demand Streaming Benchmark (Combined Corpus) <<<")
+    print(
+        "\n>>> Running Brutal Seekable VFS On-Demand Streaming Benchmark (Combined Corpus) <<<"
+    )
     combined_codec = VortexPakCodec(mode="engine", rdo=False, max_workers=8)
     combined_arch = combined_codec.encode_files(combined_ft)
     combined_blob = combined_arch.to_bytes()
@@ -774,22 +919,24 @@ def main() -> None:
     try:
         tmp_vpak_path.write_bytes(combined_blob)
         vfs_results = benchmark_vfs_streaming(tmp_vpak_path, num_queries=200)
-        comp_vfs = benchmark_competitor_random_seek(combined_ft, tmp_vpak_path, num_queries=200)
+        comp_vfs = benchmark_competitor_random_seek(
+            combined_ft, tmp_vpak_path, num_queries=200
+        )
         vfs_results.update(comp_vfs)
         print(
             f"  VortexVFS Warm Scene Cache (LRU=16) | Median: {vfs_results['median_latency_microseconds']:.1f} us | "
-            f"Mean: {vfs_results['avg_latency_microseconds']:.1f} us | P99: {vfs_results['p99_latency_microseconds']:.1f} us | "
+            f"Mean: {vfs_results['avg_latency_microseconds']:.1f} us | P99:{vfs_results['p99_latency_microseconds']:.1f} us | "
             f"Throughput: {vfs_results['effective_throughput_gbps']:.2f} GB/s"
         )
         print(
-            f"  VortexVFS Brutal Cold Cache (0% hit)| Median: {vfs_results['cold_cache_median_ms']*1000:.1f} us ({vfs_results['cold_cache_median_ms']:.3f} ms) | "
+            f"  VortexVFS Brutal Cold Cache (0% hit)| Median: {vfs_results['cold_cache_median_ms']*1000:.1f}us ({vfs_results['cold_cache_median_ms']:.3f} ms) | "
             f"Mean: {vfs_results['cold_cache_avg_ms']*1000:.1f} us ({vfs_results['cold_cache_avg_ms']:.3f} ms) | "
-            f"P95: {vfs_results['cold_cache_p95_ms']:.3f} ms (Tex Med: {vfs_results['vfs_tex_cold_median_ms']:.3f} ms, Small Med: {vfs_results['vfs_small_cold_median_ms']:.3f} ms)"
+            f"P95: {vfs_results['cold_cache_p95_ms']:.3f} ms (Tex Med:{vfs_results['vfs_tex_cold_median_ms']:.3f} ms, Small Med: {vfs_results['vfs_small_cold_median_ms']:.3f} ms)"
         )
         print(
-            f"  Per-File Zstd-9 Cold Seek + PNG Dec | Median: {vfs_results['per_file_zstd9_median_ms']*1000:.1f} us ({vfs_results['per_file_zstd9_median_ms']:.3f} ms) | "
-            f"Mean: {vfs_results['per_file_zstd9_avg_ms']*1000:.1f} us ({vfs_results['per_file_zstd9_avg_ms']:.3f} ms) | "
-            f"Tex Med: {vfs_results['per_file_tex_median_ms']:.3f} ms (Avg {vfs_results['per_file_tex_avg_ms']:.3f} ms), Small Med: {vfs_results['per_file_small_median_ms']:.3f} ms | "
+            f"  Per-File Zstd-9 Cold Seek + PNG Dec | Median:{vfs_results['per_file_zstd9_median_ms']*1000:.1f} us ({vfs_results['per_file_zstd9_median_ms']:.3f} ms) | "
+            f"Mean: {vfs_results['per_file_zstd9_avg_ms']*1000:.1f} us({vfs_results['per_file_zstd9_avg_ms']:.3f} ms) | "
+            f"Tex Med: {vfs_results['per_file_tex_median_ms']:.3f} ms (Avg{vfs_results['per_file_tex_avg_ms']:.3f} ms), Small Med: {vfs_results['per_file_small_median_ms']:.3f} ms | "
             f"Solid Zstd-9 Random Seek: {vfs_results['solid_zstd9_random_read_ms']:.2f} ms"
         )
         all_suites["vfs_streaming_benchmark"] = vfs_results

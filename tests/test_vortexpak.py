@@ -23,8 +23,6 @@ from vortexpak import (
     VortexPakCodec,
     VortexVFS,
     benchmark_vfs_streaming,
-    calculate_image_psnr,
-    calculate_mesh_psnr,
     quantize_float32_mantissa,
     quantize_glb_rdo,
     quantize_mesh_floats_rdo,
@@ -176,7 +174,7 @@ class TestVortexPakNativeSIMD(unittest.TestCase):
         self.assertEqual(empty_dec, b"")
 
     def test_independent_decode_buffers_no_overwrite(self):
-        """Verify that consecutive decode_archive calls return independent buffers without overwriting previous results."""
+        """Verify that consecutive decode_archive calls return independent buffers without overwriting previous results."""  # noqa: E501
         codec = VortexPakCodec(mode="engine")
 
         img1 = Image.new("RGBA", (64, 64), color=(10, 20, 30, 255))

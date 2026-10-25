@@ -1,7 +1,6 @@
 """VXTX-GPU BC1/BC4/BC5 block-compression tests: quality, alpha, decoder
 interop between native and NumPy paths, and archive/VFS/CLI integration."""
 
-import io
 import json
 import subprocess
 import sys
@@ -11,7 +10,7 @@ import unittest
 import numpy as np
 from PIL import Image
 
-from vortexpak import IS_NATIVE_AVAILABLE, VortexArchive, VortexPakCodec, VortexVFS
+from vortexpak import VortexArchive, VortexPakCodec, VortexVFS
 from vortexpak.bcn import (
     BCN_BC1,
     BCN_BC4,

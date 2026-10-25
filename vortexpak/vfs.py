@@ -14,24 +14,13 @@ import struct
 import time
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
 import zstandard as zstd
 from PIL import Image
 
 from .codec import (
-    STRAT_LZ4_FAST,
-    STRAT_RAW_BYPASS,
-    STRAT_TOKEN_FOLD_ZSTD6,
-    STRAT_TOKEN_FOLD_ZSTD19,
-    STRAT_ZSTD_3,
-    STRAT_ZSTD_6,
-    STRAT_ZSTD_12,
-    STRAT_ZSTD_19,
-    TX_ALPHA_STRIP,
-    TX_PLANAR_CHW,
-    TX_ROW_RLE,
     VXPK_MAGIC,
     VXPKError,
     AssetEntry,
@@ -210,7 +199,7 @@ class VortexVFS:
         compressed_payload = self._file.read(b_desc["comp_size"])
         if len(compressed_payload) != b_desc["comp_size"]:
             raise VXPKError(
-                f"block #{block_id} truncated on disk: expected {b_desc['comp_size']} B, read {len(compressed_payload)} B"
+                f"block #{block_id} truncated on disk: expected {b_desc['comp_size']} B, read {len(compressed_payload)} B"  # noqa: E501
             )
 
         try:
@@ -421,7 +410,7 @@ def benchmark_vfs_streaming(
 
         # 2. Realistic Scene/Level Streaming (clusters of 8 co-located assets with 16-block LRU cache)
         vfs._cache.clear()
-        scene_queries = []
+        scene_queries: list = []
         while len(scene_queries) < num_queries:
             start_idx = rng.randint(0, max(0, len(assets) - 8))
             scene_queries.extend(assets[start_idx : start_idx + 8])

@@ -23,7 +23,6 @@ import zstandard as zstd_mod
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from quality_matrix import _grad_noise, _structured, _smooth, _noise50, _bilinear
 
 plt.rcParams["font.sans-serif"] = "Segoe UI"
 plt.rcParams["axes.edgecolor"] = "#334155"
@@ -196,7 +195,7 @@ def main() -> None:
     cap = doc["capabilities"]
     val = {"yes": 1.0, "partial": 0.5, "no": 0.0, "unknown": 0.25}
     mat = np.array([[val[v] for v in cap["matrix"][f]] for f in cap["features"]])
-    im = ax.imshow(mat, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
+    ax.imshow(mat, cmap="RdYlGn", vmin=0, vmax=1, aspect="auto")
     ax.set_xticks(range(len(cap["vendors"])))
     ax.set_xticklabels(cap["vendors"], fontsize=8)
     ax.set_yticks(range(len(cap["features"])))
@@ -357,11 +356,6 @@ def competitor_chart(doc: dict) -> None:
 
     ax = ax2
     _style(ax)
-    speed_names = [
-        "bc1_fast (measured)",
-        "bc1_standard (measured)",
-        "bc1_max (measured)",
-    ]
     spd = {c: np.mean([v[1] for v in agg[c]]) for c in agg if "bc1" in c}
     bars = ax.bar(
         range(len(spd)),

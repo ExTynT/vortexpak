@@ -4,7 +4,6 @@ so no PyO3/pybind11 layer is involved."""
 
 from __future__ import annotations
 
-import shutil
 import subprocess
 from pathlib import Path
 

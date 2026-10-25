@@ -15,14 +15,12 @@ import json
 import math
 import re
 import struct
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
 from PIL import Image
 
 from .native import (
-    IS_NATIVE_AVAILABLE,
     native_calculate_image_psnr,
     native_rdo_quantize_image,
 )
@@ -70,7 +68,7 @@ def calculate_image_ssim(orig_arr: np.ndarray, quant_arr: np.ndarray) -> float:
         cov_xy = np.mean(x * y) - mu_x * mu_y
 
     num = (2.0 * mu_x * mu_y + c1) * (2.0 * cov_xy + c2)
-    den = (mu_x ** 2 + mu_y ** 2 + c1) * (var_x + var_y + c2)
+    den = (mu_x**2 + mu_y**2 + c1) * (var_x + var_y + c2)
     return float(np.mean(num / den))
 
 
@@ -79,12 +77,12 @@ def calculate_mesh_psnr(orig_floats: np.ndarray, quant_floats: np.ndarray) -> fl
     if orig_floats.size == 0 or orig_floats.shape != quant_floats.shape:
         return 100.0
     diff = orig_floats.astype(np.float64) - quant_floats.astype(np.float64)
-    mse = float(np.mean(diff ** 2))
+    mse = float(np.mean(diff**2))
     if mse < 1e-15:
         return 100.0
     bbox_range = float(np.max(orig_floats) - np.min(orig_floats))
     peak = max(bbox_range, 1.0)
-    return float(10.0 * math.log10((peak ** 2) / mse))
+    return float(10.0 * math.log10((peak**2) / mse))
 
 
 def quantize_texture_array_rdo(
@@ -182,7 +180,11 @@ def quantize_mesh_floats_rdo(
     quantized_floats = rounded_u32.view(np.float32).reshape(floats.shape).copy()
 
     # Revert any non-finite or extreme values
-    invalid = ~np.isfinite(quantized_floats) | (np.abs(quantized_floats) < 1e-7) | (np.abs(quantized_floats) > 1e7)
+    invalid = (
+        ~np.isfinite(quantized_floats)
+        | (np.abs(quantized_floats) < 1e-7)
+        | (np.abs(quantized_floats) > 1e7)
+    )
     quantized_floats[invalid] = orig_copy[invalid]
 
     psnr = calculate_mesh_psnr(orig_copy, quantized_floats)
@@ -340,7 +342,8 @@ def quantize_blend_rdo(blend_bytes: bytes, drop_bits: int = 12) -> Tuple[bytes, 
 
         # 2. Parse SDNA names, types, and structs
         p = 8
-        num_names = int.from_bytes(dna[p : p + 4], "little"); p += 4
+        num_names = int.from_bytes(dna[p : p + 4], "little")
+        p += 4
         names = []
         for _ in range(num_names):
             null_idx = dna.find(b"\x00", p)
@@ -348,7 +351,8 @@ def quantize_blend_rdo(blend_bytes: bytes, drop_bits: int = 12) -> Tuple[bytes, 
             p = null_idx + 1
         p = (p + 3) & ~3
         p += 4  # skip 'TYPE'
-        num_types = int.from_bytes(dna[p : p + 4], "little"); p += 4
+        num_types = int.from_bytes(dna[p : p + 4], "little")
+        p += 4
         types = []
         for _ in range(num_types):
             null_idx = dna.find(b"\x00", p)
@@ -362,9 +366,17 @@ def quantize_blend_rdo(blend_bytes: bytes, drop_bits: int = 12) -> Tuple[bytes, 
             p += 2
         p = (p + 3) & ~3
         p += 4  # skip 'STRC'
-        num_structs = int.from_bytes(dna[p : p + 4], "little"); p += 4
+        num_structs = int.from_bytes(dna[p : p + 4], "little")
+        p += 4
 
-        TARGET_NAMES = {"MVert", "MLoopUV", "MTFace", "BezTriple", "BPoint", "MDeformWeight"}
+        TARGET_NAMES = {
+            "MVert",
+            "MLoopUV",
+            "MTFace",
+            "BezTriple",
+            "BPoint",
+            "MDeformWeight",
+        }
         target_structs = {}
 
         for s_idx in range(num_structs):
@@ -407,8 +419,12 @@ def quantize_blend_rdo(blend_bytes: bytes, drop_bits: int = 12) -> Tuple[bytes, 
         while pos + hdr_size <= len(blend_bytes):
             code = blend_bytes[pos : pos + 4]
             sz = int.from_bytes(blend_bytes[pos + 4 : pos + 8], "little")
-            sdna_idx = int.from_bytes(blend_bytes[pos + 8 + ptr_size : pos + 12 + ptr_size], "little")
-            cnt = int.from_bytes(blend_bytes[pos + 12 + ptr_size : pos + 16 + ptr_size], "little")
+            sdna_idx = int.from_bytes(
+                blend_bytes[pos + 8 + ptr_size : pos + 12 + ptr_size], "little"
+            )
+            cnt = int.from_bytes(
+                blend_bytes[pos + 12 + ptr_size : pos + 16 + ptr_size], "little"
+            )
             block_data_pos = pos + hdr_size
             if sdna_idx in target_structs and cnt > 0:
                 s_name, s_len, float_fields = target_structs[sdna_idx]
@@ -418,9 +434,13 @@ def quantize_blend_rdo(blend_bytes: bytes, drop_bits: int = 12) -> Tuple[bytes, 
                         for k in range(n_flt):
                             flt_pos = rec_off + f_off + k * 4
                             if flt_pos + 4 <= len(out_buf):
-                                f_val = struct.unpack_from("<f", blend_bytes, flt_pos)[0]
+                                f_val = struct.unpack_from("<f", blend_bytes, flt_pos)[
+                                    0
+                                ]
                                 if math.isfinite(f_val) and 1e-7 < abs(f_val) < 1e7:
-                                    q_val = quantize_float32_mantissa(f_val, drop_bits=drop_bits)
+                                    q_val = quantize_float32_mantissa(
+                                        f_val, drop_bits=drop_bits
+                                    )
                                     struct.pack_into("<f", out_buf, flt_pos, q_val)
                                     coords_orig.append(f_val)
                                     coords_q.append(q_val)
@@ -455,7 +475,10 @@ def quantize_obj_rdo(obj_text: str, decimals: int = 4) -> Tuple[str, float]:
         tag = parts[0]
         if tag in ("v", "vn", "vt"):
             try:
-                coords = [f"{float(p):.{decimals}f}".rstrip("0").rstrip(".") for p in parts[1:]]
+                coords = [
+                    f"{float(p):.{decimals}f}".rstrip("0").rstrip(".")
+                    for p in parts[1:]
+                ]
                 out_lines.append(f"{tag} {' '.join(coords)}")
                 continue
             except ValueError:
@@ -463,4 +486,3 @@ def quantize_obj_rdo(obj_text: str, decimals: int = 4) -> Tuple[str, float]:
         out_lines.append(line)
 
     return "\n".join(out_lines), 65.0
-

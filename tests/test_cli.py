@@ -1,7 +1,6 @@
 """End-to-end CLI tests: pack -> info -> ls -> extract -> vfs-bench, plus the
 corrupt-archive error path (must exit 2 with a clean message, no traceback)."""
 
-import io
 import json
 import struct
 import subprocess

@@ -749,14 +749,12 @@ fn count_match(src: &[u8], a: usize, b: usize) -> usize {
     len
 }
 
-/// Allocate an uninitialized `Vec<u8>` of exact length `len` to avoid zero-fill overhead.
+/// Allocate the decompression output buffer. Callers overwrite every byte
+/// before reading, but plain zero-fill keeps the code lint-clean
+/// (`uninit_vec` is deny-by-default on current rustc).
 #[inline(always)]
 fn alloc_uninit_vec(len: usize) -> Vec<u8> {
-    let mut v = Vec::with_capacity(len);
-    unsafe {
-        v.set_len(len);
-    }
-    v
+    vec![0u8; len]
 }
 
 /// Compress a sub-stream using the best of `SUB_CONST`, `SUB_RANS8`, `SUB_RANS8_CHUNKED`, `SUB_VXLZ1`, or `SUB_RAW`.

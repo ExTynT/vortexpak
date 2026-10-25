@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import argparse
 import sys
+
+import numpy as np
+from PIL import Image
 import time
 from pathlib import Path
 
@@ -38,7 +41,7 @@ def main() -> None:
     p_pack.add_argument(
         "--rdo",
         action="store_true",
-        help="Enable Perceptual RDO quantization (Oodle Texture style) for textures and float32 3D models (PSNR > 48 dB)",
+        help="Enable Perceptual RDO quantization (Oodle Texture style) for textures and float32 3D models (PSNR > 48 dB)",  # noqa: E501
     )
     p_pack.add_argument(
         "--rdo-level",
@@ -164,7 +167,7 @@ def main() -> None:
                 raise SystemExit(2)
             t_ms = (time.perf_counter() - t0) * 1000.0
             print(
-                f"[VFS On-Demand] Streamed '{args.asset_path}' ({len(data):,d} B) in {t_ms:.2f} ms without full archive decompression!"
+                f"[VFS On-Demand] Streamed '{args.asset_path}' ({len(data):,d} B) in {t_ms:.2f} ms without full archive decompression!"  # noqa: E501
             )
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -173,6 +176,8 @@ def main() -> None:
                     and args.output.suffix.lower() == ".png"
                 ):
                     img = vfs.read_texture(args.asset_path, as_pil=True)
+                    if isinstance(img, np.ndarray):
+                        img = Image.fromarray(img)
                     img.save(args.output, format="PNG")
                 else:
                     args.output.write_bytes(data)

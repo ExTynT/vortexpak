@@ -229,7 +229,6 @@ def _run_config(
     dec = decode_bcn(blocks, w, h, fmt)
     channels = 2 if fmt == BCN_BC5 else 4
     dec = np.frombuffer(dec, dtype=np.uint8).reshape(h, w, channels)
-    src_arr = np.frombuffer(src, dtype=np.uint8).reshape(h, w, channels)
     psnr = _psnr(src, dec)
     px = w * h
     return {
@@ -316,7 +315,7 @@ CAPABILITIES = {
         "c_abi": ["yes", "yes", "yes", "yes", "partial"],
         "fuzz_tested_decoder": ["yes", "unknown", "partial", "partial", "yes"],
     },
-    "notes": "Competitor columns are literature/published-capability references, NOT measurements. 'partial' = subset or lower tier.",
+    "notes": "Competitor columns are literature/published-capability references, NOT measurements. 'partial'= subset or lower tier.",
 }
 
 

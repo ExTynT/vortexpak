@@ -32,6 +32,7 @@ GPU_BLOCK_BYTES = {BCN_BC1: 8, BCN_BC4: 8, BCN_BC5: 16, BCN_BC7: 16}
 QUALITY_IDS = {"fast": 0, "standard": 1, "max": 2}
 
 if IS_NATIVE_AVAILABLE and _lib is not None:
+    assert _lib is not None  # narrowed for mypy module-level bindings
     for _fn in ("bcn_encode_bc7_c", "bcn_decode_bc7_c"):
         _f = getattr(_lib, _fn)
         _f.argtypes = [
@@ -256,7 +257,7 @@ def _encode_bc1_np(rgba: bytes, w: int, h: int) -> bytes:
             else:
                 out[bi] = _encode_bc1_color_block(blk)
             bi += 1
-    return out
+    return out.tobytes()
 
 
 def _u8(raw: bytes) -> np.ndarray:
@@ -369,7 +370,7 @@ def _decode_bc1_np(blocks: bytes, w: int, h: int) -> bytes:
         | (idx_u32[:, 2].astype(np.uint32) << 16)
         | (idx_u32[:, 3].astype(np.uint32) << 24)
     )
-    nb, bw, bh = c0.shape[0], w // 4, h // 4
+    bw, bh = w // 4, h // 4
     dst = np.zeros((h, w, 4), dtype=np.uint8)
     three_g = three.reshape(bh, bw)
     for row in range(4):
@@ -419,9 +420,9 @@ def _encode_bc4_np(data: bytes, w: int, h: int) -> bytes:
 
 def _decode_bc4_np(blocks: bytes, w: int, h: int) -> bytes:
     b = np.frombuffer(blocks, dtype=np.uint8).reshape(-1, 8)
-    nb, bw, bh = b.shape[0], w // 4, h // 4
+    bw = w // 4
     dst = np.zeros((h, w), dtype=np.uint8)
-    for bi in range(nb):
+    for bi in range(b.shape[0]):
         pal = _bc4_palette(int(b[bi, 0]), int(b[bi, 1]))
         idx = int.from_bytes(b[bi, 2:8].tobytes(), "little")
         by, bx = bi // bw, bi % bw
@@ -469,7 +470,7 @@ def _encode_bc7_np(src: bytes, w: int, h: int) -> bytes:
 def _decode_bc7_np(blocks: bytes, w: int, h: int) -> bytes:
     bl = np.frombuffer(blocks, dtype=np.uint8).reshape(-1, 16)
     dst = np.zeros((h, w, 4), dtype=np.uint8)
-    bh, bw = h // 4, w // 4
+    bw = w // 4
     for bi in range(bl.shape[0]):
 
         def bit(pos):
@@ -496,7 +497,7 @@ def _decode_bc7_np(blocks: bytes, w: int, h: int) -> bytes:
 
 def _fallback_encode(src: bytes, w: int, h: int, fmt: int) -> bytes:
     if fmt == BCN_BC1:
-        return _encode_bc1_np(src, w, h).tobytes()
+        return _encode_bc1_np(src, w, h)
     if fmt == BCN_BC4:
         return _encode_bc4_np(src, w, h)
     if fmt == BCN_BC7:

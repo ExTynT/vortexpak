@@ -716,7 +716,9 @@ def native_decode_archive_parallel(
             b0, off0, _ = e.stripe_spans[0]
             total_len = sum(ln for _, _, ln in e.stripe_spans)
             start_off = block_offsets[b0] + off0
-            results[e.rel_path] = mv_big[start_off : start_off + total_len]
+            results[e.rel_path] = mv_big[  # type: ignore[assignment]
+                start_off : start_off + total_len
+            ]
         elif e.aux_block_id >= 0:
             return None
         else:
