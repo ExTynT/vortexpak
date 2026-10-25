@@ -79,11 +79,17 @@ Full capability matrix vs Oodle/Basis/NVTT: `benchmarks/quality_matrix.py` → `
 ## Repository layout
 
 ```
-vortexpak/            Python package (codec, VFS, RDO, BCn bridge, CLI)
-vortexpak_native/     Rust core (AVX2 transforms, VXLZ-ANS, BCn, C-ABI, cbindgen)
-tests/                58 Python tests (native + fallback modes)
-docs/FORMAT.md        VXPK container specification
-benchmarks/           quality matrix, peak-game benchmark, chart generators
+vortexpak/            Python package: codec.py (lanes/RDSO/dictionaries), vfs.py
+                     (seekable VFS), bcn.py (GPU block compression), rdo.py,
+                     native.py (ctypes bridge), cli.py
+vortexpak_native/     Rust core: vxlz.rs (entropy codec), bcn.rs (BC1/4/5/7),
+                     vxtx.rs (AVX2 transforms), decoder.rs, vfs.rs, rdo.rs,
+                     c_api.rs -> vortexpak.h (cbindgen, CI-verified)
+tests/                58 Python tests (native + fallback modes), incl. fuzz + E2E CLI
+docs/FORMAT.md        VXPK container specification (strategies, lanes, dictionaries)
+benchmarks/           quality_matrix.py (10-scenario gap table), run_peak_game.py,
+                     chart generators; game corpora live OUTSIDE the repo
+                     (--corpus / VORTEXPAK_CORPUS env var)
 examples/c/           pure-C consumer of the native ABI
 ```
 

@@ -880,7 +880,32 @@ def benchmark_competitor_random_seek(
 
 
 def main() -> None:
-    games_dir = Path(__file__).resolve().parent / "games"
+    import argparse
+    import os
+
+    ap = argparse.ArgumentParser(description="Full 3-game benchmark suite")
+    ap.add_argument(
+        "--corpus",
+        default=os.environ.get("VORTEXPAK_CORPUS", ""),
+        help="Directory with minetest_game/, kenney_3d_platformer/ and browserquest/ "
+        "corpora. Defaults to ../vortex_corpus/legacy_games (outside the repo).",
+    )
+    args = ap.parse_args()
+    games_dir = (
+        Path(args.corpus)
+        if args.corpus
+        else Path(__file__).resolve().parent.parent.parent
+        / "vortex_corpus"
+        / "legacy_games"
+    )
+    if not games_dir.is_dir():
+        raise SystemExit(
+            f"Benchmark corpus not found at {games_dir}.\n"
+            "Game corpora are third-party assets and live OUTSIDE this repo.\n"
+            "Point --corpus (or VORTEXPAK_CORPUS) at a directory containing "
+            "minetest_game/, kenney_3d_platformer/ and browserquest/.\n"
+            "Xonotic peak benchmark: see benchmarks/run_peak_game.py."
+        )
     all_suites: Dict[str, Any] = {}
 
     for gname in ["minetest_game", "kenney_3d_platformer", "browserquest"]:
