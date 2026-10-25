@@ -15,6 +15,7 @@ recompression:
 from __future__ import annotations
 
 import ctypes
+import struct
 
 import numpy as np
 
@@ -24,10 +25,17 @@ BCN_BC1 = 1
 BCN_BC4 = 4
 BCN_BC5 = 5
 BCN_BC7 = 7
+BCN_BCX = 11
 
-GPU_FORMAT_IDS = {"BC1": BCN_BC1, "BC4": BCN_BC4, "BC5": BCN_BC5, "BC7": BCN_BC7}
-GPU_CHANNELS = {BCN_BC1: 4, BCN_BC4: 1, BCN_BC5: 2, BCN_BC7: 4}
-GPU_BLOCK_BYTES = {BCN_BC1: 8, BCN_BC4: 8, BCN_BC5: 16, BCN_BC7: 16}
+GPU_FORMAT_IDS = {
+    "BC1": BCN_BC1,
+    "BC4": BCN_BC4,
+    "BC5": BCN_BC5,
+    "BC7": BCN_BC7,
+    "BCX": BCN_BCX,
+}
+GPU_CHANNELS = {BCN_BC1: 4, BCN_BC4: 1, BCN_BC5: 2, BCN_BC7: 4, BCN_BCX: 4}
+GPU_BLOCK_BYTES = {BCN_BC1: 8, BCN_BC4: 8, BCN_BC5: 16, BCN_BC7: 16, BCN_BCX: 16}
 
 QUALITY_IDS = {"fast": 0, "standard": 1, "max": 2}
 
@@ -57,6 +65,28 @@ if IS_NATIVE_AVAILABLE and _lib is not None:
         ctypes.c_size_t,
     ]
     _rdo.restype = ctypes.c_int64
+    _bcx_enc = _lib.bcn_encode_bcx_c
+    _bcx_enc.argtypes = [
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _bcx_enc.restype = ctypes.c_int64
+    _bcx_dec = _lib.bcn_decode_bcx_c
+    _bcx_dec.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_uint32,
+        ctypes.c_uint32,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _bcx_dec.restype = ctypes.c_int64
     _dec = _lib.bcn_decode_c
     _dec.argtypes = [
         ctypes.c_int32,
@@ -137,6 +167,15 @@ def encode_bcn(
         if n >= 0:
             return out[:n].tobytes()
         raise ValueError("BC7 encode failed")
+    if fmt == BCN_BCX and _native_ready():
+        nb = (w // 4) * (h // 4)
+        out = np.empty(4 + (nb + 7) // 8 + nb * 16, dtype=np.uint8)
+        n = _bcx_enc(
+            q, 15000, src, len(src), w, h, out.ctypes.data_as(ctypes.c_char_p), out.size
+        )
+        if n >= 0:
+            return out[:n].tobytes()
+        raise ValueError("BCX encode failed")
     if fmt == BCN_BC1 and rdo > 0.0 and _native_ready():
         out = np.empty(_blocks_len(w, h, fmt), dtype=np.uint8)
         n = _rdo(
@@ -179,10 +218,17 @@ def decode_bcn(blocks: bytes, w: int, h: int, fmt: int) -> bytes:
         else:
             raise ValueError("BCN payload must be bytes-like")
     blocks = bytes(blocks)
-    if len(blocks) != _blocks_len(w, h, fmt):
+    if fmt != BCN_BCX and len(blocks) != _blocks_len(w, h, fmt):
         raise ValueError(
             f"BCN payload length {len(blocks)} != expected {_blocks_len(w, h, fmt)} for {w}x{h}"
         )
+    if fmt == BCN_BCX and _native_ready():
+        out = np.empty(w * h * 4, dtype=np.uint8)
+        n = _bcx_dec(
+            blocks, len(blocks), w, h, out.ctypes.data_as(ctypes.c_char_p), out.size
+        )
+        if n >= 0:
+            return out[:n].tobytes()
     if fmt == BCN_BC7 and _native_ready():
         out = np.empty(w * h * GPU_CHANNELS[fmt], dtype=np.uint8)
         n = _lib.bcn_decode_bc7_c(
@@ -544,6 +590,8 @@ def _fallback_encode(src: bytes, w: int, h: int, fmt: int) -> bytes:
         return _encode_bc4_np(src, w, h)
     if fmt == BCN_BC7:
         return _encode_bc7_np(src, w, h)
+    if fmt == BCN_BCX:
+        return _encode_bcx_np(src, w, h)
     arr = np.frombuffer(src, dtype=np.uint8).reshape(h, w, 2)
     r = _encode_bc4_np(arr[..., 0].tobytes(), w, h)
     g = _encode_bc4_np(arr[..., 1].tobytes(), w, h)
@@ -557,6 +605,8 @@ def _fallback_decode(blocks: bytes, w: int, h: int, fmt: int) -> bytes:
         return _decode_bc4_np(blocks, w, h)
     if fmt == BCN_BC7:
         return _decode_bc7_np(blocks, w, h)
+    if fmt == BCN_BCX:
+        return _decode_bcx_np(blocks, w, h)
     half = len(blocks) // 2
     r = np.frombuffer(_decode_bc4_np(blocks[:half], w, h), dtype=np.uint8)
     g = np.frombuffer(_decode_bc4_np(blocks[half:], w, h), dtype=np.uint8)

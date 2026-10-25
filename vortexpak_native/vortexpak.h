@@ -20,6 +20,10 @@
 
 #define QUALITY_MAX 2
 
+#define BCN_BCX 11
+
+#define BCX_DEFAULT_LAMBDA 150.0
+
 #define BCN_BC7 7
 
 #define STRAT_RAW_BYPASS 0
@@ -232,5 +236,21 @@ int64_t bcn_encode_bc1_rdo_c(uint32_t quality,
                              uint32_t height,
                              uint8_t *dst_ptr,
                              uintptr_t dst_cap);
+
+int64_t bcn_encode_bcx_c(uint32_t quality,
+                         uint32_t lambda_x100,
+                         const uint8_t *src_ptr,
+                         uintptr_t src_len,
+                         uint32_t width,
+                         uint32_t height,
+                         uint8_t *dst_ptr,
+                         uintptr_t dst_cap);
+
+int64_t bcn_decode_bcx_c(const uint8_t *src_ptr,
+                         uintptr_t src_len,
+                         uint32_t width,
+                         uint32_t height,
+                         uint8_t *dst_ptr,
+                         uintptr_t dst_cap);
 
 #endif  /* VORTEXPAK_NATIVE_H */

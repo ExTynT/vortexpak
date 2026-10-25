@@ -738,3 +738,63 @@ pub unsafe extern "C" fn bcn_encode_bc1_rdo_c(
         Err(_) => -3,
     }
 }
+
+#[no_mangle]
+pub unsafe extern "C" fn bcn_encode_bcx_c(
+    quality: u32,
+    lambda_x100: u32,
+    src_ptr: *const u8,
+    src_len: usize,
+    width: u32,
+    height: u32,
+    dst_ptr: *mut u8,
+    dst_cap: usize,
+) -> i64 {
+    if (src_ptr.is_null() && src_len > 0) || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    let dst = std::slice::from_raw_parts_mut(dst_ptr, dst_cap);
+    match crate::bcn::encode_bcx(
+        src,
+        width as usize,
+        height as usize,
+        quality as u8,
+        lambda_x100 as f64 / 100.0,
+    ) {
+        Ok(out) => {
+            if out.len() > dst_cap {
+                return -2;
+            }
+            dst[..out.len()].copy_from_slice(&out);
+            out.len() as i64
+        }
+        Err(_) => -3,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn bcn_decode_bcx_c(
+    src_ptr: *const u8,
+    src_len: usize,
+    width: u32,
+    height: u32,
+    dst_ptr: *mut u8,
+    dst_cap: usize,
+) -> i64 {
+    if (src_ptr.is_null() && src_len > 0) || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    let dst = std::slice::from_raw_parts_mut(dst_ptr, dst_cap);
+    match crate::bcn::decode_bcx(src, width as usize, height as usize) {
+        Ok(out) => {
+            if out.len() > dst_cap {
+                return -2;
+            }
+            dst[..out.len()].copy_from_slice(&out);
+            out.len() as i64
+        }
+        Err(_) => -3,
+    }
+}
