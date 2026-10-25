@@ -216,7 +216,9 @@ class TestGpuArchiveIntegration(unittest.TestCase):
         ]
         arch = codec.encode_files(files)
         modes = {e.tx_mode for e in arch.entries if e.tx_flags & TX_BCN}
-        self.assertIn("BC1", modes)  # opaque corpus content stays BC1 (4bpp)
+        self.assertIn(
+            "BCX", modes
+        )  # opaque content now defaults to BCX (adaptive BC1/BC7)
         blob = arch.to_bytes()
         arch2 = VortexArchive.from_bytes(blob)
         ok, _ = codec.verify_archive(arch2)

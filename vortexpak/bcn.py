@@ -583,6 +583,39 @@ def _decode_bc7_np(blocks: bytes, w: int, h: int) -> bytes:
     return dst.tobytes()
 
 
+def _encode_bcx_np(src: bytes, w: int, h: int) -> bytes:
+    """Fallback BCX: all blocks as BC1 (no upgrade without native core)."""
+    bc1 = _encode_bc1_np(src, w, h)
+    nb = (w // 4) * (h // 4)
+    bm = (nb + 7) // 8
+    return struct.pack("<I", bm) + bytes(bm) + bc1
+
+
+def _decode_bcx_np(blocks: bytes, w: int, h: int) -> bytes:
+    bw, bh = w // 4, h // 4
+    bm = struct.unpack_from("<I", blocks, 0)[0]
+    bitmap = blocks[4 : 4 + bm]
+    pos = 4 + bm
+    dst = np.zeros((h, w, 4), dtype=np.uint8)
+    for by in range(bh):
+        for bx in range(bw):
+            bi = by * bw + bx
+            is7 = (bitmap[bi // 8] >> (bi % 8)) & 1
+            bl = 16 if is7 else 8
+            chunk = blocks[pos : pos + bl]
+            if is7:
+                px = np.frombuffer(_decode_bc7_np(chunk, 4, 4), np.uint8).reshape(
+                    4, 4, 4
+                )
+            else:
+                px = np.frombuffer(_decode_bc1_np(chunk, 4, 4), np.uint8).reshape(
+                    4, 4, 4
+                )
+            dst[by * 4 : by * 4 + 4, bx * 4 : bx * 4 + 4] = px
+            pos += bl
+    return dst.tobytes()
+
+
 def _fallback_encode(src: bytes, w: int, h: int, fmt: int) -> bytes:
     if fmt == BCN_BC1:
         return _encode_bc1_np(src, w, h)

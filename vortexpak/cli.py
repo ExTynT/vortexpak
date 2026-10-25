@@ -51,7 +51,7 @@ def main() -> None:
     )
     p_pack.add_argument(
         "--gpu",
-        choices=["none", "bc1", "bc5", "bc7", "auto"],
+        choices=["none", "bc1", "bc5", "bc7", "bcx", "auto"],
         default="none",
         help="VXTX-GPU block compression for engine-mode textures (BC1: 4:1, BC5: 2:1 for normal maps)",
     )

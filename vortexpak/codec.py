@@ -58,7 +58,7 @@ from .native import (
     native_vxlz_compress_blocks_parallel,
     native_vxlz_decompress,
 )
-from .bcn import BCN_BC1, BCN_BC5, BCN_BC7, decode_bcn, encode_bcn
+from .bcn import BCN_BC1, BCN_BC5, BCN_BC7, BCN_BCX, decode_bcn, encode_bcn
 from .rdo import (
     calculate_image_psnr,
     calculate_image_ssim,
@@ -755,10 +755,10 @@ def _encode_texture_gpu(
     if arr.ndim != 3 or arr.shape[0] % 4 or arr.shape[1] % 4 or arr.shape[0] == 0:
         return None
     h, w = int(arr.shape[0]), int(arr.shape[1])
-    fmt_map = {"bc1": BCN_BC1, "bc5": BCN_BC5, "bc7": BCN_BC7}
+    fmt_map = {"bc1": BCN_BC1, "bc5": BCN_BC5, "bc7": BCN_BC7, "bcx": BCN_BCX}
     if gpu_format == "auto":
-        # BC7 carries smooth alpha at 8bpp; opaque content stays BC1 at 4bpp.
-        candidates = ["bc7", "bc1"] if (arr[..., 3] < 255).any() else ["bc1"]
+        # BC7 carries smooth alpha at 8bpp; BCX adaptively mixes BC1/BC7 per block.
+        candidates = ["bc7", "bcx"] if (arr[..., 3] < 255).any() else ["bcx"]
     elif gpu_format in fmt_map:
         candidates = [gpu_format]
     else:
@@ -946,7 +946,7 @@ class VortexPakCodec:
             raise ValueError("mode must be 'strict' or 'engine'")
         if entropy_backend not in ("vxlz", "hybrid", "zstd"):
             raise ValueError("entropy_backend must be 'vxlz', 'hybrid', or 'zstd'")
-        if gpu not in ("none", "bc1", "bc5", "bc7", "auto"):
+        if gpu not in ("none", "bc1", "bc5", "bc7", "bcx", "auto"):
             raise ValueError("gpu must be 'none', 'bc1', 'bc5', 'bc7', or 'auto'")
         self.mode = mode
         self.rdo = rdo
