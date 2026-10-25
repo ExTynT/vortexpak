@@ -112,25 +112,45 @@ so random access is fully preserved.
 
 ### VXTX-GPU block compression (`TX_BCN`)
 
-When `tx_flags` has bit 3 set, the entry payload is raw GPU block data that
-uploads to Direct3D/Vulkan/Metal without CPU-side decompression:
+When `tx_flags` has bit 3 set, the entry payload is GPU block data:
 
-* `tx_mode` carries the format name: `BC1` (4:1, RGB + 1-bit alpha),
-  `BC4` (4:1, single channel), `BC5` (2:1, two-channel / normal maps).
+* `tx_mode` carries the format name. `BC1`, `BC4`, `BC5` and `BC7` are
+  bit-exact to the D3D11/Vulkan specification and upload to the GPU as-is
+  (`glCompressedTexImage2D` / `vkCmdCopyBufferToImage`). `BCX` is a
+  storage-only format (see below) and must be decoded before upload.
 * `tx_shape` = (height, width, channels) of the decoded tensor:
-  4 for BC1, 2 for BC5, 1 for BC4. Dimensions are multiples of 4.
+  4 for BC1/BC7/BCX, 2 for BC5, 1 for BC4. Dimensions are multiples of 4.
 * `xxh64` is the checksum of the DECODED tensor (lossy format), so
   integrity verification works uniformly for all asset classes.
-* `materialize_full_rgba=False` reads return the raw block payload;
+* `materialize_full_rgba=False` reads return the stored payload;
   `True` returns the decoded tensor (BC5 yields an (H, W, 2) array).
 
-#### BC7 (mode 6 subset, `tx_mode = "BC7"`)
+Conformance is tested in CI: every format is decoded by an independent
+reference decoder (Pillow's BCn decoder via a DDS wrapper) and must match
+our decoder bit-for-bit (`tests/test_bcn.py::TestReferenceDecoderConformance`).
 
-8bpp RGBA: 7-bit endpoints + shared P-bit per endpoint (exact 8-bit
-reconstruction), single subset, 2-bit indices with round-to-nearest blend
-weights (0, 1/3, 2/3, 1). Rotation / index-selection bits are 0. Alpha
-interpolates smoothly — use BC7 for alpha or gradient content (BC1 1-bit
-alpha collapses smooth alpha to ~7 dB), BC1 for opaque 4bpp.
+* **BC4**: palette index 0 = endpoint 0, 1 = endpoint 1, 2..7 = interpolants
+  (or 4 interpolants + 0 + 255 when endpoint 0 <= endpoint 1).
+* **BC5**: each 16-byte block is the BC4 block for R followed by the BC4
+  block for G.
+
+#### BC7 (mode 6, `tx_mode = "BC7"`)
+
+Spec mode 6: 8bpp RGBA, single subset, 7-bit endpoints with one P-bit per
+endpoint, 4-bit indices with the standard weight table
+(0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64); pixel 0 is the
+anchor (index MSB implicitly 0). The encoder only emits mode 6; the decoder
+returns transparent black for any other mode. Use BC7 for alpha or
+gradient content (BC1's 1-bit alpha collapses smooth alpha), BC1 for opaque
+4bpp.
+
+#### BCX (storage-only, `tx_mode = "BCX"`)
+
+Per-block mix of BC1 (8 B) and BC7 mode-6 (16 B) blocks for disk size:
+`u32 bitmap_bytes` + bitmap (1 bit per block, 1 = BC7) + blocks in raster
+order. GPUs cannot sample a mixed texture, so BCX is decoded to RGBA (or
+transcoded) at load time. `--gpu auto` never selects it; it is opt-in
+(`--gpu bcx`).
 
 #### Closed-loop RDO (BC1, cook-time)
 

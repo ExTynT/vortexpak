@@ -1,7 +1,9 @@
 """VXTX-GPU BC1/BC4/BC5 block-compression tests: quality, alpha, decoder
 interop between native and NumPy paths, and archive/VFS/CLI integration."""
 
+import io
 import json
+import struct
 import subprocess
 import sys
 import tempfile
@@ -151,6 +153,70 @@ class TestBcnCore(unittest.TestCase):
             encode_bcn(b"\x00" * 64, 4, 4, 42)
 
 
+def _dds(blocks: bytes, w: int, h: int, dxgi: int, block_bytes: int) -> bytes:
+    """Minimal DDS container (DX10 header) so a third-party decoder can read our blocks."""
+    linear = (w // 4) * (h // 4) * block_bytes
+    return (
+        struct.pack("<4sI", b"DDS ", 124)
+        + struct.pack("<IIIIII", 0x81007, h, w, linear, 0, 0)
+        + bytes(44)
+        + struct.pack("<II4sIIIII", 32, 0x4, b"DX10", 0, 0, 0, 0, 0)
+        + struct.pack("<IIIII", 0x1000, 0, 0, 0, 0)
+        + struct.pack("<IIIII", dxgi, 3, 0, 1, 0)
+        + blocks
+    )
+
+
+class TestReferenceDecoderConformance(unittest.TestCase):
+    """Independent oracle: Pillow's BCn decoder implements the same D3D/Vulkan
+    spec as GPUs. Our blocks must decode bit-identically through it, otherwise
+    a real GPU would show something different from what we measure."""
+
+    W = H = 64
+    CASES = [  # name, fmt, DXGI format, block bytes, channel selector
+        ("BC1", BCN_BC1, 71, 8, lambda a: a),
+        ("BC4", BCN_BC4, 80, 8, lambda a: a[..., 0].copy()),
+        ("BC5", BCN_BC5, 83, 16, lambda a: a[..., :2].copy()),
+        ("BC7", BCN_BC7, 98, 16, lambda a: a),
+    ]
+
+    @staticmethod
+    def _image() -> np.ndarray:
+        rng = np.random.default_rng(3)
+        img = np.frombuffer(_sample_rgba(64, 64), np.uint8).reshape(64, 64, 4).copy()
+        img[16:48, 16:48, :3] = rng.integers(0, 256, (32, 32, 3))
+        img[..., 3] = np.tile(np.linspace(0, 255, 64).astype(np.uint8), (64, 1))
+        return img
+
+    def _run(self, encoder, decoder):
+        img = self._image()
+        for name, fmt, dxgi, bb, select in self.CASES:
+            with self.subTest(fmt=name):
+                src = select(img)
+                blk = encoder(src.tobytes(), self.W, self.H, fmt)
+                try:
+                    im = Image.open(io.BytesIO(_dds(blk, self.W, self.H, dxgi, bb)))
+                    im.load()
+                except (NotImplementedError, OSError) as exc:
+                    self.skipTest(f"installed Pillow cannot decode {name}: {exc}")
+                ref = np.array(im)
+                ch = 1 if src.ndim == 2 else src.shape[2]
+                ours = np.frombuffer(decoder(blk, self.W, self.H, fmt), np.uint8)
+                if ch == 1:
+                    ours = ours.reshape(self.H, self.W)
+                    ref = ref if ref.ndim == 2 else ref[..., 0]
+                else:
+                    ours = ours.reshape(self.H, self.W, ch)
+                    ref = ref[..., :ch]
+                np.testing.assert_array_equal(ours, ref, err_msg=name)
+
+    def test_native_path_matches_reference(self):
+        self._run(encode_bcn, decode_bcn)
+
+    def test_fallback_path_matches_reference(self):
+        self._run(_fallback_encode, _fallback_decode)
+
+
 class TestGpuArchiveIntegration(unittest.TestCase):
     def _make_corpus(self, root):
         root.mkdir(parents=True, exist_ok=True)
@@ -216,9 +282,7 @@ class TestGpuArchiveIntegration(unittest.TestCase):
         ]
         arch = codec.encode_files(files)
         modes = {e.tx_mode for e in arch.entries if e.tx_flags & TX_BCN}
-        self.assertIn(
-            "BCX", modes
-        )  # opaque content now defaults to BCX (adaptive BC1/BC7)
+        self.assertIn("BC1", modes)  # opaque content stays GPU-native BC1 (4bpp)
         blob = arch.to_bytes()
         arch2 = VortexArchive.from_bytes(blob)
         ok, _ = codec.verify_archive(arch2)

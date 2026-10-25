@@ -301,17 +301,17 @@ fn encode_bc1_block_alpha(px: &[[u8; 4]; 16], out: &mut [u8; 8]) {
 
 /// Build the BC4 8-entry palette for an endpoint pair.
 fn bc4_palette(e0: u8, e1: u8) -> [u8; 8] {
-    let (a, b) = (e0 as i32, e1 as i32);
-    let mut pal = [0u8; 8];
+    // D3D/Vulkan BC4 order: 0 = e0, 1 = e1, 2..7 = interpolants (or 0/255).
+    let (a, b) = (e0 as u32, e1 as u32);
+    let mut pal = [e0, e1, 0, 0, 0, 0, 0, 0];
     if a > b {
-        for (i, p) in pal.iter_mut().enumerate() {
-            *p = ((a * (7 - i as i32) + b * i as i32 + 3) / 7) as u8;
+        for i in 1..7u32 {
+            pal[i as usize + 1] = (((7 - i) * a + i * b) / 7) as u8;
         }
     } else {
-        for i in 0..6 {
-            pal[i] = ((a * (5 - i as i32) + b * i as i32 + 2) / 5) as u8;
+        for i in 1..5u32 {
+            pal[i as usize + 1] = (((5 - i) * a + i * b) / 5) as u8;
         }
-        pal[6] = 0;
         pal[7] = 255;
     }
     pal
@@ -434,6 +434,7 @@ fn expand565_rgb(c: u16) -> [f32; 3] {
     [p[0] as f32, p[1] as f32, p[2] as f32]
 }
 
+#[allow(dead_code)]
 fn palette_4c(c0: u16, c1: u16) -> [[f32; 3]; 4] {
     let e0 = expand565_rgb(c0);
     let e1 = expand565_rgb(c1);
@@ -624,6 +625,7 @@ fn eval_packed_i(px: &[[u8; 4]], pal_i: &[[u8; 3]]) -> (u32, u32) {
     (err, indices)
 }
 
+#[allow(dead_code)]
 fn eval_packed(
     px: &[[u8; 4]],
     pal: &[[f32; 3]],
@@ -653,6 +655,7 @@ fn eval_packed(
 
 /// Exact weighted 1D k-segmentation of pixels projected onto an axis.
 /// Returns segment id per pixel (input order).
+#[allow(dead_code)]
 fn dp_partition(px: &[[u8; 4]], axis: [f32; 3], k: usize) -> [usize; 16] {
     let n = px.len().min(16);
     // Stack-allocated: no heap allocations in the hot path.
@@ -1124,9 +1127,20 @@ fn encode_bc1_block_quality(px: &[[u8; 4]], quality: u8) -> Option<(f32, u16, u1
 }
 
 /// Emit a full opaque 4-color block from a quality-fit result.
-fn emit_bc1_color(px: &[[u8; 4]], fit: (f32, u16, u16, u32), out: &mut [u8; 8]) {
+fn emit_bc1_color(_px: &[[u8; 4]], fit: (f32, u16, u16, u32), out: &mut [u8; 8]) {
     let (_err, mut c0, mut c1, mut indices) = fit;
-    if c0 <= c1 {
+    if c0 == c1 {
+        // Equal endpoints would select 3-color mode (index 3 = transparent
+        // black). Every palette entry is the same color, so nudge one endpoint
+        // and point all pixels at the exact one.
+        if c0 > 0 {
+            c1 = c0 - 1;
+            indices = 0;
+        } else {
+            c0 = 1;
+            indices = 0x5555_5555;
+        }
+    } else if c0 < c1 {
         // Enforce the 4-color wire rule, remapping indices 0<->3, 1<->2.
         std::mem::swap(&mut c0, &mut c1);
         let remap = |i: u32| match i {
@@ -1201,26 +1215,34 @@ fn emit_bc1_alpha(
 
 /// Route one block through the requested quality tier.
 fn encode_bc1_block_dispatch(px: &[[u8; 4]; 16], quality: u8, out: &mut [u8; 8]) {
-    if quality != QUALITY_FAST {
-        if px.iter().any(|p| p[3] < 255) {
-            let opaque: Vec<[u8; 4]> = px.iter().filter(|p| p[3] >= 128).map(|p| *p).collect();
-            if !opaque.is_empty() {
-                if let Some(fit) = encode_bc1_block_quality(px, quality) {
-                    emit_bc1_alpha(px, &opaque, fit, out);
-                    return;
-                }
-            }
-            encode_bc1_block_fast(px, out); // fully transparent / degenerate
-            return;
-        }
-        if let Some(fit) = encode_bc1_block_quality(px, quality) {
-            emit_bc1_color(px, fit, out);
-            return;
-        }
-    }
     encode_bc1_block_fast(px, out);
+    if quality == QUALITY_FAST {
+        return;
+    }
+    let mut cand = [0u8; 8];
+    let produced = if px.iter().any(|p| p[3] < 255) {
+        let opaque: Vec<[u8; 4]> = px.iter().filter(|p| p[3] >= 128).copied().collect();
+        if opaque.is_empty() {
+            false
+        } else if let Some(fit) = encode_bc1_block_quality(px, quality) {
+            emit_bc1_alpha(px, &opaque, fit, &mut cand);
+            true
+        } else {
+            false
+        }
+    } else if let Some(fit) = encode_bc1_block_quality(px, quality) {
+        emit_bc1_color(px, fit, &mut cand);
+        true
+    } else {
+        false
+    };
+    // Quality tiers are monotonic: the higher tier wins only if it decodes better.
+    if produced && block_error_bc1(px, &cand) < block_error_bc1(px, out) {
+        *out = cand;
+    }
 }
 
+#[allow(dead_code)]
 fn encode_bc1(rgba: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> {
     encode_bc1_q(rgba, w, h, QUALITY_MAX)
 }
@@ -1317,7 +1339,8 @@ fn decode_bc4(blocks: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
-/// BC5: two-channel (RG) — stored as plane-major BC4(R) || BC4(G).
+/// BC5: two-channel (RG). Spec layout: each 16-byte block is the BC4 block
+/// for R followed by the BC4 block for G (block-interleaved).
 fn encode_bc5(rg: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> {
     validate_dims(w, h, rg.len(), 2)?;
     let mut r = vec![0u8; w * h];
@@ -1326,8 +1349,12 @@ fn encode_bc5(rg: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> {
         r[i] = rg[i * 2];
         g[i] = rg[i * 2 + 1];
     }
-    let mut out = encode_bc4(&r, w, h)?;
-    out.extend_from_slice(&encode_bc4(&g, w, h)?);
+    let (br, bg) = (encode_bc4(&r, w, h)?, encode_bc4(&g, w, h)?);
+    let mut out = Vec::with_capacity(br.len() * 2);
+    for (cr, cg) in br.chunks_exact(8).zip(bg.chunks_exact(8)) {
+        out.extend_from_slice(cr);
+        out.extend_from_slice(cg);
+    }
     Ok(out)
 }
 
@@ -1342,9 +1369,14 @@ fn decode_bc5(blocks: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> {
             blocks.len()
         ));
     }
-    let half = blocks.len() / 2;
-    let r = decode_bc4(&blocks[..half], w, h)?;
-    let g = decode_bc4(&blocks[half..], w, h)?;
+    let mut br = Vec::with_capacity(blocks.len() / 2);
+    let mut bg = Vec::with_capacity(blocks.len() / 2);
+    for blk in blocks.chunks_exact(16) {
+        br.extend_from_slice(&blk[..8]);
+        bg.extend_from_slice(&blk[8..]);
+    }
+    let r = decode_bc4(&br, w, h)?;
+    let g = decode_bc4(&bg, w, h)?;
     let mut out = vec![0u8; w * h * 2];
     for i in 0..w * h {
         out[i * 2] = r[i];
@@ -1478,405 +1510,6 @@ pub fn encode_bc1_rdo(
     Ok(out)
 }
 
-// ==================== BC7 Partition Mode (proprietary 2-subset) ====================
-//
-// "Adaptive Partition Refinement" (APR): instead of brute-forcing all 64 BC7
-// partition patterns, we pre-rank a curated set of 8 patterns covering the
-// dominant real-world texture splits (L/R, T/B, diagonal, checkerboard,
-// corner), then fit each subset independently with the same LSQ machinery
-// from mode 6. The winning pattern competes against single-subset mode 6.
-//
-// Bit layout (128-bit block, bit 3 = 1 distinguishes from mode 6):
-//   bit 0: mode = 1
-//   bits 1-2: rotation = 00 (always)
-//   bit 3: partition flag = 1
-//   bits 4-6: partition pattern ID (0-7, 3 bits)
-//   bits 7-26: subset 0 endpoint A RGBA (5 bits/channel, 20 bits)
-//   bits 27-46: subset 0 endpoint B RGBA (5 bits/channel, 20 bits)
-//   bit 47: subset 0 P-bit
-//   bits 48-67: subset 1 endpoint A RGBA (5 bits/channel, 20 bits)
-//   bits 68-87: subset 1 endpoint B RGBA (5 bits/channel, 20 bits)
-//   bit 88: subset 1 P-bit
-//   bits 89-120: 2-bit indices x 16 pixels
-//   bits 121-127: unused (0)
-//
-// Endpoints: 5-bit value + shared P-bit per subset = 6 bits effective,
-// replicated to 8 bits via (v << 2) | (v >> 4).
-
-/// 8 partition patterns for a 4x4 block (raster order, subset ID per pixel).
-/// Curated from observed game-texture structure: geometric splits dominate.
-const BCN7P_PATTERNS: [[u8; 16]; 8] = [
-    // 0: left/right split (columns 0-1 vs 2-3)
-    [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
-    // 1: top/bottom split (rows 0-1 vs 2-3)
-    [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
-    // 2: diagonal (x+y < 4 vs >= 4)
-    [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1],
-    // 3: anti-diagonal (x >= y vs x < y)
-    [0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0],
-    // 4: 2x2 checkerboard
-    [0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0],
-    // 5: left-half with soft right edge
-    [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1],
-    // 6: top-half with soft bottom edge
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-    // 7: top-left quadrant vs rest
-    [0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-];
-
-/// Quantize an 8-bit channel to 5 bits + P-bit.
-#[inline]
-fn bcn7p_quant5(e: f32) -> (u8, u8) {
-    let e8 = e.round().clamp(0.0, 255.0) as u8;
-    let v5 = e8 >> 3;
-    let p = (e8 >> 2) & 1;
-    (v5, p)
-}
-
-/// Reconstruct an 8-bit channel from 5-bit + P-bit.
-#[inline]
-fn bcn7p_expand5(v5: u8, p: u8) -> u8 {
-    let v6 = ((v5 & 0x1F) << 1) | (p & 1);
-    (v6 << 2) | (v6 >> 4)
-}
-
-fn bcn7p_palette(c0: [u8; 4], c1: [u8; 4]) -> [[u8; 4]; 4] {
-    let mut pal = [[0u8; 4]; 4];
-    for i in 0..4 {
-        for c in 0..4 {
-            let w = i as u32;
-            pal[i][c] = ((c0[c] as u32 * (3 - w) + c1[c] as u32 * w + 1) / 3) as u8;
-        }
-    }
-    pal
-}
-
-/// Fit one subset: LSQ on the subset's pixels, then exact index assignment.
-fn bcn7p_fit_subset(
-    px: &[(&[u8; 4], usize)], // (pixel, position) for this subset
-    ratios: &[(f32, f32)],
-) -> Option<([u8; 4], [u8; 4], u64, f64)> {
-    // Returns (endpointA, endpointB, packed_indices_for_this_subset, error)
-    // Indices are 2-bit, packed at their original positions.
-    if px.is_empty() {
-        return None;
-    }
-    let k = ratios.len();
-    // Pre-assign by nearest endpoint heuristic (bbox midpoint split)
-    let mut mn = [255u8; 4];
-    let mut mx = [0u8; 4];
-    for (p, _) in px.iter() {
-        for c in 0..4 {
-            mn[c] = mn[c].min(p[c]);
-            mx[c] = mx[c].max(p[c]);
-        }
-    }
-    // Initial assignment: split by luminance
-    let lum =
-        |p: &[u8; 4]| -> f32 { 0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32 };
-    let (lmin, lmax) = {
-        let mut lo = f32::MAX;
-        let mut hi = f32::MIN;
-        for (p, _) in px.iter() {
-            let l = lum(p);
-            lo = lo.min(l);
-            hi = hi.max(l);
-        }
-        (lo, hi)
-    };
-    let mid = (lmin + lmax) * 0.5;
-
-    let mut e0 = [0f32; 4];
-    let mut e1 = [0f32; 4];
-    for pass in 0..3 {
-        // Assign indices based on current endpoints (or initial heuristic)
-        let mut idx: Vec<usize> = Vec::with_capacity(px.len());
-        for (p, _) in px.iter() {
-            if pass == 0 && e0[0] == 0.0 && e0[1] == 0.0 && e0[3] == 0.0 && e0[2] == 0.0 {
-                // First pass: split by luminance
-                idx.push(if lum(p) < mid { 0 } else { 3 });
-            } else {
-                // Evaluate palette
-                let v0: [u8; 4] = [
-                    e0[0].round().clamp(0.0, 255.0) as u8,
-                    e0[1].round().clamp(0.0, 255.0) as u8,
-                    e0[2].round().clamp(0.0, 255.0) as u8,
-                    e0[3].round().clamp(0.0, 255.0) as u8,
-                ];
-                let v1: [u8; 4] = [
-                    e1[0].round().clamp(0.0, 255.0) as u8,
-                    e1[1].round().clamp(0.0, 255.0) as u8,
-                    e1[2].round().clamp(0.0, 255.0) as u8,
-                    e1[3].round().clamp(0.0, 255.0) as u8,
-                ];
-                let pal = bcn7p_palette(v0, v1);
-                let mut bi = 0usize;
-                let mut bd = u64::MAX;
-                for (ki, c) in pal.iter().enumerate() {
-                    let d: u64 = (0..4)
-                        .map(|ch| {
-                            let dd = p[ch] as i64 - c[ch] as i64;
-                            (dd * dd) as u64
-                        })
-                        .sum();
-                    if d < bd {
-                        bd = d;
-                        bi = ki;
-                    }
-                }
-                idx.push(bi);
-            }
-        }
-        // LSQ for endpoints given assignment
-        let mut nn = [0f32; 4];
-        let mut scc = [[0f32; 4]; 4];
-        for ((p, _), &s) in px.iter().zip(idx.iter()) {
-            nn[s] += 1.0;
-            for c in 0..4 {
-                scc[s][c] += p[c] as f32;
-            }
-        }
-        let mut a00 = 0f32;
-        let mut a01 = 0f32;
-        let mut a11 = 0f32;
-        for (s, (ra, rb)) in ratios.iter().enumerate() {
-            a00 += nn[s] * ra * ra;
-            a01 += nn[s] * ra * rb;
-            a11 += nn[s] * rb * rb;
-        }
-        let det = a00 * a11 - a01 * a01;
-        if det.abs() < 1e-4 {
-            // Degenerate: use bbox
-            for c in 0..4 {
-                e0[c] = mn[c] as f32;
-                e1[c] = mx[c] as f32;
-            }
-        } else {
-            for c in 0..4 {
-                let b0: f32 = (0..k).map(|s| ratios[s].0 * scc[s][c]).sum();
-                let b1: f32 = (0..k).map(|s| ratios[s].1 * scc[s][c]).sum();
-                e0[c] = ((a11 * b0 - a01 * b1) / det).clamp(0.0, 255.0);
-                e1[c] = ((a00 * b1 - a01 * b0) / det).clamp(0.0, 255.0);
-            }
-        }
-    }
-    // Final evaluation with quantized endpoints
-    let mut v5a = [0u8; 4];
-    let mut v5b = [0u8; 4];
-    let mut pa = [0u8; 4];
-    let mut pb = [0u8; 4];
-    for c in 0..4 {
-        let (v, p) = bcn7p_quant5(e0[c]);
-        v5a[c] = v;
-        pa[c] = p;
-        let (v, p) = bcn7p_quant5(e1[c]);
-        v5b[c] = v;
-        pb[c] = p;
-    }
-    // Majority P-bit per subset (shared across channels)
-    let maj_a = if pa.iter().sum::<u8>() >= 2 { 1 } else { 0 };
-    let maj_b = if pb.iter().sum::<u8>() >= 2 { 1 } else { 0 };
-    let qa: [u8; 4] = [
-        bcn7p_expand5(v5a[0], maj_a),
-        bcn7p_expand5(v5a[1], maj_a),
-        bcn7p_expand5(v5a[2], maj_a),
-        bcn7p_expand5(v5a[3], maj_a),
-    ];
-    let qb: [u8; 4] = [
-        bcn7p_expand5(v5b[0], maj_b),
-        bcn7p_expand5(v5b[1], maj_b),
-        bcn7p_expand5(v5b[2], maj_b),
-        bcn7p_expand5(v5b[3], maj_b),
-    ];
-    let pal = bcn7p_palette(qa, qb);
-    let mut err = 0f64;
-    let mut packed = 0u64;
-    for (p, pos) in px.iter() {
-        let p = *p;
-        let pos = *pos;
-        let mut bi = 0usize;
-        let mut bd = u64::MAX;
-        for (ki, c) in pal.iter().enumerate() {
-            let d: u64 = (0..4)
-                .map(|ch| {
-                    let dd = p[ch] as i64 - c[ch] as i64;
-                    (dd * dd) as u64
-                })
-                .sum();
-            if d < bd {
-                bd = d;
-                bi = ki;
-            }
-        }
-        err += bd as f64;
-        packed |= (bi as u64) << (2 * pos);
-    }
-    // Return raw 8-bit endpoints (caller quantizes for packing)
-    Some((
-        [
-            e0[0].round() as u8,
-            e0[1].round() as u8,
-            e0[2].round() as u8,
-            e0[3].round() as u8,
-        ],
-        [
-            e1[0].round() as u8,
-            e1[1].round() as u8,
-            e1[2].round() as u8,
-            e1[3].round() as u8,
-        ],
-        packed,
-        err,
-    ))
-}
-
-/// Encode a 4x4 block with partition mode: try all 8 patterns, pick best.
-fn encode_bc7p_block(px: &[[u8; 4]; 16]) -> Option<([u8; 16], f64)> {
-    let ratios: Vec<(f32, f32)> = vec![
-        (1.0, 0.0),
-        (2.0 / 3.0, 1.0 / 3.0),
-        (1.0 / 3.0, 2.0 / 3.0),
-        (0.0, 1.0),
-    ];
-    let mut best: Option<(f64, usize, u64, [[u8; 4]; 2], [[u8; 4]; 2])> = None;
-
-    for (pat_id, pattern) in BCN7P_PATTERNS.iter().enumerate() {
-        // Split pixels into subsets
-        let mut sub0: Vec<(&[u8; 4], usize)> = Vec::new();
-        let mut sub1: Vec<(&[u8; 4], usize)> = Vec::new();
-        for (i, p) in px.iter().enumerate() {
-            if pattern[i] == 0 {
-                sub0.push((p, i));
-            } else {
-                sub1.push((p, i));
-            }
-        }
-        if sub0.is_empty() || sub1.is_empty() {
-            continue;
-        }
-
-        let fit0 = bcn7p_fit_subset(&sub0, &ratios);
-        let fit1 = bcn7p_fit_subset(&sub1, &ratios);
-        let (ea0, eb0, idx0, err0) = fit0?;
-        let (ea1, eb1, idx1, err1) = fit1?;
-        let total_err = err0 + err1;
-        let combined_idx = idx0 | idx1; // disjoint bit positions
-
-        if best.as_ref().map(|(e, ..)| total_err < *e).unwrap_or(true) {
-            best = Some((total_err, pat_id, combined_idx, [ea0, eb0], [ea1, eb1]));
-        }
-    }
-
-    let (err, pat_id, indices, [ea0, eb0], [ea1, eb1]) = best?;
-
-    // Pack 128-bit block
-    let mut bits = [0u8; 16];
-    let mut set = |pos: usize, len: usize, val: u64| {
-        for k in 0..len {
-            if (val >> k) & 1 == 1 {
-                bits[(pos + k) / 8] |= 1 << ((pos + k) % 8);
-            }
-        }
-    };
-    set(0, 1, 1); // mode
-    set(1, 2, 0); // rotation
-    set(3, 1, 1); // partition flag
-    set(4, 3, pat_id as u64);
-
-    // Subset 0 endpoints (quantize to 5+P)
-    for c in 0..4 {
-        let (v, _) = bcn7p_quant5(ea0[c] as f32);
-        set(7 + c * 5, 5, v as u64);
-    }
-    for c in 0..4 {
-        let (v, _) = bcn7p_quant5(eb0[c] as f32);
-        set(27 + c * 5, 5, v as u64);
-    }
-    // P-bit: majority vote
-    let p0_bits: Vec<u8> = (0..4).map(|c| bcn7p_quant5(ea0[c] as f32).1).collect();
-    let pb0_bits: Vec<u8> = (0..4).map(|c| bcn7p_quant5(eb0[c] as f32).1).collect();
-    let all_p0: u32 = p0_bits
-        .iter()
-        .chain(pb0_bits.iter())
-        .map(|&x| x as u32)
-        .sum();
-    set(47, 1, if all_p0 >= 4 { 1 } else { 0 });
-
-    // Subset 1 endpoints
-    for c in 0..4 {
-        let (v, _) = bcn7p_quant5(ea1[c] as f32);
-        set(48 + c * 5, 5, v as u64);
-    }
-    for c in 0..4 {
-        let (v, _) = bcn7p_quant5(eb1[c] as f32);
-        set(68 + c * 5, 5, v as u64);
-    }
-    let p1_bits: Vec<u8> = (0..4).map(|c| bcn7p_quant5(ea1[c] as f32).1).collect();
-    let pb1_bits: Vec<u8> = (0..4).map(|c| bcn7p_quant5(eb1[c] as f32).1).collect();
-    let all_p1: u32 = p1_bits
-        .iter()
-        .chain(pb1_bits.iter())
-        .map(|&x| x as u32)
-        .sum();
-    set(88, 1, if all_p1 >= 4 { 1 } else { 0 });
-
-    // Indices (bits 89-120)
-    set(89, 32, indices);
-
-    Some((bits, err))
-}
-
-/// Decode a partition-mode BC7 block.
-fn decode_bc7p_block(src: &[u8; 16], dst: &mut [u8]) {
-    let get = |pos: usize, len: usize| -> u64 {
-        let mut v = 0u64;
-        for k in 0..len {
-            if (src[(pos + k) / 8] >> ((pos + k) % 8)) & 1 == 1 {
-                v |= 1 << k;
-            }
-        }
-        v
-    };
-    let pat_id = (get(4, 3) as usize).min(7);
-    let pattern = &BCN7P_PATTERNS[pat_id];
-    let p0 = get(47, 1) as u8;
-    let p1 = get(88, 1) as u8;
-
-    let c0a: [u8; 4] = [
-        bcn7p_expand5(get(7, 5) as u8, p0),
-        bcn7p_expand5(get(12, 5) as u8, p0),
-        bcn7p_expand5(get(17, 5) as u8, p0),
-        bcn7p_expand5(get(22, 5) as u8, p0),
-    ];
-    let c0b: [u8; 4] = [
-        bcn7p_expand5(get(27, 5) as u8, p0),
-        bcn7p_expand5(get(32, 5) as u8, p0),
-        bcn7p_expand5(get(37, 5) as u8, p0),
-        bcn7p_expand5(get(42, 5) as u8, p0),
-    ];
-    let c1a: [u8; 4] = [
-        bcn7p_expand5(get(48, 5) as u8, p1),
-        bcn7p_expand5(get(53, 5) as u8, p1),
-        bcn7p_expand5(get(58, 5) as u8, p1),
-        bcn7p_expand5(get(63, 5) as u8, p1),
-    ];
-    let c1b: [u8; 4] = [
-        bcn7p_expand5(get(68, 5) as u8, p1),
-        bcn7p_expand5(get(73, 5) as u8, p1),
-        bcn7p_expand5(get(78, 5) as u8, p1),
-        bcn7p_expand5(get(83, 5) as u8, p1),
-    ];
-
-    let pal0 = bcn7p_palette(c0a, c0b);
-    let pal1 = bcn7p_palette(c1a, c1b);
-
-    for i in 0..16 {
-        let idx = (get(89 + 2 * i, 2) as usize).min(3);
-        let pal = if pattern[i] == 0 { &pal0 } else { &pal1 };
-        dst[i * 4..i * 4 + 4].copy_from_slice(&pal[idx]);
-    }
-}
-
 // ==================== BCX: Per-Block Adaptive BC1/BC7 Mixed Format ====================
 //
 // Proprietary rate-distortion format selection: each 4x4 block is encoded
@@ -1971,9 +1604,8 @@ pub fn decode_bcx(blocks: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> 
         return Err(format!("BCN dimensions must be multiples of 4: {w}x{h}"));
     }
     let bw = w / 4;
-    let bh = h / 4;
-    let n = bw * bh;
-    let bm_sz = (n + 7) / 8;
+    let n = bw * (h / 4);
+    let bm_sz = n.div_ceil(8);
     if blocks.len() < 4 + bm_sz {
         return Err("BCX payload too short".into());
     }
@@ -1982,231 +1614,195 @@ pub fn decode_bcx(blocks: &[u8], w: usize, h: usize) -> Result<Vec<u8>, String> 
         return Err(format!("BCX bitmap size mismatch: {stored} != {bm_sz}"));
     }
     let bitmap = &blocks[4..4 + bm_sz];
+    let is7 = |bi: usize| (bitmap[bi / 8] >> (bi % 8)) & 1 == 1;
+    // Prefix offsets once (O(n)) and require an exact payload length.
+    let mut offsets = Vec::with_capacity(n);
     let mut pos = 4 + bm_sz;
+    for bi in 0..n {
+        offsets.push(pos);
+        pos += if is7(bi) { 16 } else { 8 };
+    }
+    if pos != blocks.len() {
+        return Err(format!(
+            "BCX payload length {} != expected {pos}",
+            blocks.len()
+        ));
+    }
     let mut out = vec![0u8; w * h * 4];
     out.par_chunks_exact_mut(w * 16)
         .enumerate()
         .for_each(|(by, row)| {
             let mut px = [0u8; 64];
-            let mut local_pos = pos;
-            // Walk to the start of this row's blocks
-            for b in 0..(by * bw) {
-                local_pos += if (bitmap[b / 8] >> (b % 8)) & 1 == 1 {
-                    16
-                } else {
-                    8
-                };
-            }
             for bx in 0..bw {
                 let bi = by * bw + bx;
-                let is7 = (bitmap[bi / 8] >> (bi % 8)) & 1 == 1;
-                let bl = if is7 { 16 } else { 8 };
-                if local_pos + bl > blocks.len() {
-                    return;
-                }
-                if is7 {
+                let o = offsets[bi];
+                if is7(bi) {
                     let mut b16 = [0u8; 16];
-                    b16.copy_from_slice(&blocks[local_pos..local_pos + 16]);
+                    b16.copy_from_slice(&blocks[o..o + 16]);
                     decode_bc7_block(&b16, &mut px);
                 } else {
-                    let mut b8 = [0u8; 8];
-                    b8.copy_from_slice(&blocks[local_pos..local_pos + 8]);
-                    decode_bc1_block(&b8, &mut px);
+                    decode_bc1_block(&blocks[o..o + 8], &mut px);
                 }
                 for i in 0..16 {
-                    let o = ((i / 4) * w + bx * 4 + i % 4) * 4;
-                    row[o..o + 4].copy_from_slice(&px[i * 4..i * 4 + 4]);
+                    let d = ((i / 4) * w + bx * 4 + i % 4) * 4;
+                    row[d..d + 4].copy_from_slice(&px[i * 4..i * 4 + 4]);
                 }
-                local_pos += bl;
             }
         });
     Ok(out)
 }
 
-// ==================== BC7 (mode 6, 1 subset, shared indices) ====================
+// ==================== BC7 mode 6 (spec-conformant) ====================
 //
-// Proprietary subset of the BC7 spec chosen for maximum quality per code
-// complexity: mode 6 = 8bpp RGBA, 7-bit endpoints + shared P-bit per
-// endpoint (exact 8-bit reconstruction), 2-bit indices, blend weights
-// (0, 1/3, 2/3, 1) with round-to-nearest. Rotation and index-selection
-// bits are fixed to 0; alpha interpolates smoothly (no 1-bit cliff like
-// BC1 alpha). Bit layout follows the BC7 specification.
+// D3D11/Vulkan BC7 mode 6: one subset, RGBA, 7-bit endpoints plus one P-bit
+// per endpoint, 4-bit indices with the standard weight table. Pixel 0 is the
+// anchor (index MSB implicitly 0). Layout, LSB-first: mode bits 0-6 =
+// 0b1000000, R0 R1 G0 G1 B0 B1 A0 A1 (7 bits each, bits 7-62), P0 (63),
+// P1 (64), indices (65-127: 3 bits for pixel 0, 4 bits for the rest).
+// Verified bit-exact against an independent reference decoder in tests.
 
 pub const BCN_BC7: i32 = 7;
 
-#[inline]
-fn bcn7_blend(a: u8, b: u8, w: u32) -> u8 {
-    ((a as u32 * (3 - w) + b as u32 * w + 1) / 3) as u8
-}
+const BC7_WEIGHTS4: [u32; 16] = [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64];
 
-fn bcn7_palette(c0: [u8; 4], c1: [u8; 4]) -> [[u8; 4]; 4] {
-    let mut pal = [[0u8; 4]; 4];
-    for i in 0..4 {
+fn bc7_palette(e0: [u8; 4], e1: [u8; 4]) -> [[u8; 4]; 16] {
+    let mut pal = [[0u8; 4]; 16];
+    for (i, p) in pal.iter_mut().enumerate() {
+        let w = BC7_WEIGHTS4[i];
         for c in 0..4 {
-            pal[i][c] = bcn7_blend(c0[c], c1[c], i as u32);
+            p[c] = (((64 - w) * e0[c] as u32 + w * e1[c] as u32 + 32) >> 6) as u8;
         }
     }
     pal
 }
 
-/// P-bit quantization: 8-bit component -> 7-bit + parity, exact round trip.
+/// Nearest 8-bit value representable as (v7 << 1) | p.
 #[inline]
-fn bcn7_pquant(e: f32) -> (u8, u8) {
-    let e8 = e.round().clamp(0.0, 255.0) as u8;
-    (e8 >> 1, e8 & 1)
+fn bc7_quant(e: f32, p: u8) -> u8 {
+    let v = ((e - p as f32) * 0.5).round().clamp(0.0, 127.0) as u8;
+    (v << 1) | p
 }
 
-fn bcn7_maj(p: &[u8; 4]) -> u8 {
-    let s = p[0] as u32 + p[1] as u32 + p[2] as u32 + p[3] as u32;
-    if s >= 2 {
-        1
-    } else {
-        0
-    }
-}
-
-fn bcn7_apply_p(v: [u8; 4], pp: u8) -> [u8; 4] {
-    [
-        (v[0] << 1) | pp,
-        (v[1] << 1) | pp,
-        (v[2] << 1) | pp,
-        (v[3] << 1) | pp,
-    ]
-}
-
-fn bcn7_eval(px: &[[u8; 4]], c0: [u8; 4], c1: [u8; 4]) -> (f64, u64) {
-    let pal = bcn7_palette(c0, c1);
-    let mut err = 0f64;
-    let mut indices = 0u64;
+fn bc7_assign(px: &[[u8; 4]; 16], pal: &[[u8; 4]; 16]) -> (u64, [u8; 16]) {
+    let mut err = 0u64;
+    let mut idx = [0u8; 16];
     for (i, p) in px.iter().enumerate() {
         let mut bi = 0usize;
-        let mut bd = u64::MAX;
+        let mut bd = u32::MAX;
         for (k, c) in pal.iter().enumerate() {
-            let d: u64 = (0..4)
-                .map(|ch| {
-                    let dd = p[ch] as i64 - c[ch] as i64;
-                    (dd * dd) as u64
-                })
-                .sum();
+            let mut d = 0u32;
+            for ch in 0..4 {
+                let dd = p[ch] as i32 - c[ch] as i32;
+                d += (dd * dd) as u32;
+            }
             if d < bd {
                 bd = d;
                 bi = k;
             }
         }
-        err += bd as f64;
-        indices |= (bi as u64) << (2 * i);
+        err += bd as u64;
+        idx[i] = bi as u8;
     }
-    (err, indices)
+    (err, idx)
 }
 
 fn encode_bc7_block(px: &[[u8; 4]; 16]) -> ([u8; 16], f64) {
+    let lum = |p: &[u8; 4]| -> u32 {
+        299 * p[0] as u32 + 587 * p[1] as u32 + 114 * p[2] as u32 + 500 * p[3] as u32
+    };
     let mut mn = [255u8; 4];
     let mut mx = [0u8; 4];
+    let (mut lo, mut hi) = (px[0], px[0]);
     for p in px.iter() {
         for c in 0..4 {
             mn[c] = mn[c].min(p[c]);
             mx[c] = mx[c].max(p[c]);
         }
-    }
-    let mut y_lo = f32::MAX;
-    let mut y_hi = f32::MIN;
-    let (mut lo, mut hi) = (px[0], px[0]);
-    for p in px.iter() {
-        let y = 0.299 * p[0] as f32 + 0.587 * p[1] as f32 + 0.114 * p[2] as f32 + 0.5 * p[3] as f32;
-        if y < y_lo {
-            y_lo = y;
+        if lum(p) < lum(&lo) {
             lo = *p;
         }
-        if y > y_hi {
-            y_hi = y;
+        if lum(p) > lum(&hi) {
             hi = *p;
         }
     }
-    let cands: Vec<([u8; 4], [u8; 4])> = vec![(mn, mx), (mx, mn), (lo, hi), (hi, lo)];
-    let ratios = [
-        (1.0f32, 0.0f32),
-        (2.0 / 3.0, 1.0 / 3.0),
-        (1.0 / 3.0, 2.0 / 3.0),
-        (0.0, 1.0),
-    ];
-    let mut best_err = f64::MAX;
-    let mut best = ([0u8; 4], [0u8; 4], 0u64);
-    for (ea, eb) in &cands {
-        let mut e0 = [ea[0] as f32, ea[1] as f32, ea[2] as f32, ea[3] as f32];
-        let mut e1 = [eb[0] as f32, eb[1] as f32, eb[2] as f32, eb[3] as f32];
+    let mut best_err = u64::MAX;
+    let mut best_q = ([0u8; 4], [0u8; 4]);
+    let mut best_idx = [0u8; 16];
+    for (sa, sb) in [(mn, mx), (lo, hi)] {
+        let mut e0 = [0f32; 4];
+        let mut e1 = [0f32; 4];
+        for c in 0..4 {
+            e0[c] = sa[c] as f32;
+            e1[c] = sb[c] as f32;
+        }
         for _ in 0..3 {
-            let mut v0 = [0u8; 4];
-            let mut v1 = [0u8; 4];
-            let mut p0 = [0u8; 4];
-            let mut p1 = [0u8; 4];
-            for c in 0..4 {
-                (v0[c], p0[c]) = bcn7_pquant(e0[c]);
-                (v1[c], p1[c]) = bcn7_pquant(e1[c]);
-            }
-            let a0 = bcn7_apply_p(v0, bcn7_maj(&p0));
-            let a1 = bcn7_apply_p(v1, bcn7_maj(&p1));
-            let pal = bcn7_palette(a0, a1);
-            let mut idx = Vec::with_capacity(16);
-            for p in px.iter() {
-                let mut bi = 0usize;
-                let mut bd = u64::MAX;
-                for (k, c) in pal.iter().enumerate() {
-                    let d: u64 = (0..4)
-                        .map(|ch| {
-                            let dd = p[ch] as i64 - c[ch] as i64;
-                            (dd * dd) as u64
-                        })
-                        .sum();
-                    if d < bd {
-                        bd = d;
-                        bi = k;
+            // All 4 P-bit combinations for the current continuous endpoints.
+            let mut it_err = u64::MAX;
+            let mut it_idx = [0u8; 16];
+            for pa in 0..2u8 {
+                for pb in 0..2u8 {
+                    let q0 = [
+                        bc7_quant(e0[0], pa),
+                        bc7_quant(e0[1], pa),
+                        bc7_quant(e0[2], pa),
+                        bc7_quant(e0[3], pa),
+                    ];
+                    let q1 = [
+                        bc7_quant(e1[0], pb),
+                        bc7_quant(e1[1], pb),
+                        bc7_quant(e1[2], pb),
+                        bc7_quant(e1[3], pb),
+                    ];
+                    let (err, idx) = bc7_assign(px, &bc7_palette(q0, q1));
+                    if err < it_err {
+                        it_err = err;
+                        it_idx = idx;
+                    }
+                    if err < best_err {
+                        best_err = err;
+                        best_q = (q0, q1);
+                        best_idx = idx;
                     }
                 }
-                idx.push(bi);
             }
-            let mut n = [0f32; 4];
-            let mut sc = [[0f32; 4]; 4];
-            for (p, s) in px.iter().zip(idx.iter()) {
-                n[*s] += 1.0;
+            if best_err == 0 {
+                break;
+            }
+            // Least-squares endpoint refit for the fixed index assignment.
+            let (mut a00, mut a01, mut a11) = (0f32, 0f32, 0f32);
+            let mut b0 = [0f32; 4];
+            let mut b1 = [0f32; 4];
+            for (p, &i) in px.iter().zip(it_idx.iter()) {
+                let t = BC7_WEIGHTS4[i as usize] as f32 / 64.0;
+                let s = 1.0 - t;
+                a00 += s * s;
+                a01 += s * t;
+                a11 += t * t;
                 for c in 0..4 {
-                    sc[*s][c] += p[c] as f32;
+                    b0[c] += s * p[c] as f32;
+                    b1[c] += t * p[c] as f32;
                 }
-            }
-            let mut a00 = 0f32;
-            let mut a01 = 0f32;
-            let mut a11 = 0f32;
-            for (s, (ra, rb)) in ratios.iter().enumerate() {
-                a00 += n[s] * ra * ra;
-                a01 += n[s] * ra * rb;
-                a11 += n[s] * rb * rb;
             }
             let det = a00 * a11 - a01 * a01;
-            if det.abs() >= 1e-4 {
-                for c in 0..4 {
-                    let b0: f32 = (0..4).map(|s| ratios[s].0 * sc[s][c]).sum();
-                    let b1: f32 = (0..4).map(|s| ratios[s].1 * sc[s][c]).sum();
-                    e0[c] = ((a11 * b0 - a01 * b1) / det).clamp(0.0, 255.0);
-                    e1[c] = ((a00 * b1 - a01 * b0) / det).clamp(0.0, 255.0);
-                }
+            if det.abs() < 1e-6 {
+                break;
+            }
+            for c in 0..4 {
+                e0[c] = ((a11 * b0[c] - a01 * b1[c]) / det).clamp(0.0, 255.0);
+                e1[c] = ((a00 * b1[c] - a01 * b0[c]) / det).clamp(0.0, 255.0);
             }
         }
-        let mut v0 = [0u8; 4];
-        let mut v1 = [0u8; 4];
-        let mut p0 = [0u8; 4];
-        let mut p1 = [0u8; 4];
-        for c in 0..4 {
-            (v0[c], p0[c]) = bcn7_pquant(e0[c]);
-            (v1[c], p1[c]) = bcn7_pquant(e1[c]);
-        }
-        let a0 = bcn7_apply_p(v0, bcn7_maj(&p0));
-        let a1 = bcn7_apply_p(v1, bcn7_maj(&p1));
-        let (err, indices) = bcn7_eval(px, a0, a1);
-        if err < best_err {
-            best_err = err;
-            best = (a0, a1, indices);
+    }
+    let (mut q0, mut q1) = best_q;
+    let mut idx = best_idx;
+    // Anchor rule: pixel 0's index MSB must be 0. The weight table is
+    // symmetric, so swapping endpoints and mirroring indices is lossless.
+    if idx[0] >= 8 {
+        std::mem::swap(&mut q0, &mut q1);
+        for v in idx.iter_mut() {
+            *v = 15 - *v;
         }
     }
-    let (a0, a1, indices) = best;
     let mut bits = [0u8; 16];
     let mut set = |pos: usize, len: usize, val: u64| {
         for k in 0..len {
@@ -2215,27 +1811,29 @@ fn encode_bc7_block(px: &[[u8; 4]; 16]) -> ([u8; 16], f64) {
             }
         }
     };
-    set(0, 1, 1);
-    set(1, 2, 0);
-    set(3, 1, 0);
+    set(0, 7, 0x40);
     for c in 0..4 {
-        set(4 + c * 7, 7, (a0[c] >> 1) as u64);
-        set(32 + c * 7, 7, (a1[c] >> 1) as u64);
+        set(7 + c * 14, 7, (q0[c] >> 1) as u64);
+        set(14 + c * 14, 7, (q1[c] >> 1) as u64);
     }
-    set(60, 1, (a0[0] & 1) as u64);
-    set(61, 1, (a1[0] & 1) as u64);
-    set(62, 32, indices);
-
-    // Try partition mode (2 subsets); use it only if it beats single-subset.
-    if let Some((p_bits, p_err)) = encode_bc7p_block(px) {
-        if p_err < best_err {
-            return (p_bits, p_err);
-        }
+    set(63, 1, (q0[0] & 1) as u64);
+    set(64, 1, (q1[0] & 1) as u64);
+    let mut pos = 65;
+    for (i, &v) in idx.iter().enumerate() {
+        let n = if i == 0 { 3 } else { 4 };
+        set(pos, n, v as u64);
+        pos += n;
     }
-    (bits, best_err)
+    (bits, best_err as f64)
 }
 
+/// Decode a BC7 block. Only mode 6 (the only mode this encoder emits) is
+/// supported; any other mode decodes to transparent black.
 fn decode_bc7_block(src: &[u8; 16], dst: &mut [u8]) {
+    if src[0] & 0x7F != 0x40 {
+        dst[..64].fill(0);
+        return;
+    }
     let get = |pos: usize, len: usize| -> u64 {
         let mut v = 0u64;
         for k in 0..len {
@@ -2245,29 +1843,21 @@ fn decode_bc7_block(src: &[u8; 16], dst: &mut [u8]) {
         }
         v
     };
-    // Bit 3: 0 = single-subset (mode 6), 1 = partition (2-subset)
-    if get(3, 1) == 1 {
-        decode_bc7p_block(src, dst);
-        return;
+    let p0 = get(63, 1) as u8;
+    let p1 = get(64, 1) as u8;
+    let mut e0 = [0u8; 4];
+    let mut e1 = [0u8; 4];
+    for c in 0..4 {
+        e0[c] = ((get(7 + c * 14, 7) as u8) << 1) | p0;
+        e1[c] = ((get(14 + c * 14, 7) as u8) << 1) | p1;
     }
-    let p0 = get(60, 1) as u8;
-    let p1 = get(61, 1) as u8;
-    let c0 = [
-        ((get(4, 7) << 1) | p0 as u64) as u8,
-        ((get(11, 7) << 1) | p0 as u64) as u8,
-        ((get(18, 7) << 1) | p0 as u64) as u8,
-        ((get(25, 7) << 1) | p0 as u64) as u8,
-    ];
-    let c1 = [
-        ((get(32, 7) << 1) | p1 as u64) as u8,
-        ((get(39, 7) << 1) | p1 as u64) as u8,
-        ((get(46, 7) << 1) | p1 as u64) as u8,
-        ((get(53, 7) << 1) | p1 as u64) as u8,
-    ];
-    let pal = bcn7_palette(c0, c1);
+    let pal = bc7_palette(e0, e1);
+    let mut pos = 65;
     for i in 0..16 {
-        let idx = (get(62 + 2 * i, 2) as usize).min(3);
-        dst[i * 4..i * 4 + 4].copy_from_slice(&pal[idx]);
+        let n = if i == 0 { 3 } else { 4 };
+        let v = get(pos, n) as usize;
+        pos += n;
+        dst[i * 4..i * 4 + 4].copy_from_slice(&pal[v]);
     }
 }
 
@@ -2534,6 +2124,9 @@ mod tests {
         }
         let blocks = encode_bc7(&src, 32, 32).unwrap();
         assert_eq!(blocks.len(), 8 * 8 * 16);
+        // Spec mode 6: low 7 bits of byte 0 == 0b1000000, anchor index MSB == 0.
+        assert!(blocks.chunks(16).all(|b| b[0] & 0x7F == 0x40));
+        assert!(blocks.chunks(16).all(|b| (b[8] >> 3) & 1 == 0));
         let dec = decode_bc7(&blocks, 32, 32).unwrap();
         // Bilinear r,g patches quantized onto a 4-point line: ~34-35 dB is the
         // honest ceiling for single-subset BC7 here; regression guard only.
@@ -2556,6 +2149,30 @@ mod tests {
         let dec = decode_bc7(&encode_bc7(&src, 16, 16).unwrap(), 16, 16).unwrap();
         let q = psnr(&src, &dec);
         assert!(q > 35.0, "BC7 alpha PSNR too low: {q}");
+    }
+
+    #[test]
+    fn test_bc1_max_near_flat_block_not_transparent() {
+        // All pixels fall in one 565 bucket but are not identical: the fit
+        // collapses to equal endpoints, which must not decode as 3-color mode.
+        let mut src = vec![0u8; 8 * 8 * 4];
+        for (i, px) in src.chunks_exact_mut(4).enumerate() {
+            px.copy_from_slice(&[100 + (i % 2) as u8, 100, 100, 255]);
+        }
+        let blocks = encode_bc1_q(&src, 8, 8, QUALITY_MAX).unwrap();
+        let dec = decode_bc1(&blocks, 8, 8).unwrap();
+        assert!(dec.chunks_exact(4).all(|p| p[3] == 255));
+        assert!(psnr(&src, &dec) > 40.0);
+    }
+
+    #[test]
+    fn test_bcx_roundtrip_and_truncation() {
+        let src = sample_rgba(32, 32);
+        let enc = encode_bcx(&src, 32, 32, QUALITY_MAX, BCX_DEFAULT_LAMBDA).unwrap();
+        let dec = decode_bcx(&enc, 32, 32).unwrap();
+        assert!(psnr(&src, &dec) > 28.0);
+        assert!(decode_bcx(&enc[..enc.len() - 1], 32, 32).is_err());
+        assert!(decode_bcx(&[0u8; 3], 4, 4).is_err());
     }
 
     #[test]
@@ -2615,7 +2232,7 @@ mod tests {
             "MAX quality must not regress the corpus"
         );
         // The smooth bilinear block must measurably improve (cluster fit + LSQ).
-        let (name, block) = &corpus[0];
+        let (_name, block) = &corpus[0];
         let src: Vec<u8> = block.iter().flat_map(|p| p.iter().copied()).collect();
         let mut fast = [0u8; 8];
         encode_bc1_block_fast(block, &mut fast);

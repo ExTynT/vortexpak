@@ -280,14 +280,26 @@ def _expand565(c: int) -> np.ndarray:
     )
 
 
+_BC7_W4 = np.array(
+    [0, 4, 9, 13, 17, 21, 26, 30, 34, 38, 43, 47, 51, 55, 60, 64], dtype=np.int64
+)
+
+
 def _bc4_palette(e0: int, e1: int) -> np.ndarray:
+    """D3D/Vulkan BC4 order: 0 = e0, 1 = e1, 2..7 = interpolants (or 0/255)."""
     a, b = int(e0), int(e1)
     if a > b:
-        return np.array(
-            [(a * (7 - i) + b * i + 3) // 7 for i in range(8)], dtype=np.uint8
-        )
-    pal = np.array([(a * (5 - i) + b * i + 2) // 5 for i in range(6)], dtype=np.uint8)
-    return np.concatenate([pal, [0, 255]]).astype(np.uint8)
+        mids = [((7 - i) * a + i * b) // 7 for i in range(1, 7)]
+        return np.array([a, b, *mids], dtype=np.uint8)
+    mids = [((5 - i) * a + i * b) // 5 for i in range(1, 5)]
+    return np.array([a, b, *mids, 0, 255], dtype=np.uint8)
+
+
+def _bc7_palette(e0, e1) -> np.ndarray:
+    w = _BC7_W4[:, None]
+    a = np.asarray(e0, np.int64)[None, :]
+    b = np.asarray(e1, np.int64)[None, :]
+    return ((64 - w) * a + w * b + 32) >> 6
 
 
 def _encode_bc1_np(rgba: bytes, w: int, h: int) -> bytes:
@@ -478,108 +490,83 @@ def _decode_bc4_np(blocks: bytes, w: int, h: int) -> bytes:
 
 
 def _encode_bc7_np(src: bytes, w: int, h: int) -> bytes:
-    arr = np.frombuffer(src, dtype=np.uint8).reshape(h, w, 4)
+    """Spec BC7 mode 6 (reference path: bbox endpoints, exact index search)."""
+    arr = np.frombuffer(src, dtype=np.uint8).reshape(h, w, 4).astype(np.int64)
     out = np.zeros(((w // 4) * (h // 4), 16), dtype=np.uint8)
     bi = 0
     for by in range(h // 4):
         for bx in range(w // 4):
             blk = arr[by * 4 : by * 4 + 4, bx * 4 : bx * 4 + 4].reshape(16, 4)
-            mn = blk.min(axis=0).astype(int)
-            mx = blk.max(axis=0).astype(int)
-            # P-bit: keep even base + majority parity; components stay in 0..255.
-            p0 = int((mn % 2).sum()) >= 2
-            p1 = int((mx % 2).sum()) >= 2
-            c0 = (mn & 0xFE) | int(p0)
-            c1 = (mx & 0xFE) | int(p1)
-            pal = np.stack([c0, (2 * c0 + c1 + 1) // 3, (c0 + 2 * c1 + 1) // 3, c1])
-            d = blk.astype(np.int64)[:, None, :] - pal[None, :, :]
-            idx = (d**2).sum(-1).argmin(1).astype(np.uint64)
-            packed = sum(int(v) << (2 * k) for k, v in enumerate(idx))
+            best = None
+            for pa in (0, 1):
+                for pb in (0, 1):
+                    q0 = (
+                        np.clip(np.round((blk.min(0) - pa) / 2), 0, 127).astype(
+                            np.int64
+                        )
+                        * 2
+                        + pa
+                    )
+                    q1 = (
+                        np.clip(np.round((blk.max(0) - pb) / 2), 0, 127).astype(
+                            np.int64
+                        )
+                        * 2
+                        + pb
+                    )
+                    d = ((blk[:, None, :] - _bc7_palette(q0, q1)[None]) ** 2).sum(-1)
+                    err = int(d.min(1).sum())
+                    if best is None or err < best[0]:
+                        best = (err, q0, q1, d.argmin(1))
+            assert best is not None
+            _, q0, q1, idx = best
+            if idx[0] >= 8:  # anchor rule: pixel 0 index MSB must be 0
+                q0, q1, idx = q1, q0, 15 - idx
             bits = np.zeros(128, dtype=np.uint8)
-            bits[0] = 1
+
+            def put(pos: int, n: int, v: int) -> None:
+                for k in range(n):
+                    bits[pos + k] = (v >> k) & 1
+
+            put(0, 7, 0x40)
             for c in range(4):
-                for k in range(7):
-                    if (int(c0[c]) >> 1 >> k) & 1:
-                        bits[4 + c * 7 + k] = 1
-                    if (int(c1[c]) >> 1 >> k) & 1:
-                        bits[32 + c * 7 + k] = 1
-            bits[60] = 1 if p0 else 0
-            bits[61] = 1 if p1 else 0
-            for k in range(32):
-                if (packed >> k) & 1:
-                    bits[62 + k] = 1
+                put(7 + c * 14, 7, int(q0[c]) >> 1)
+                put(14 + c * 14, 7, int(q1[c]) >> 1)
+            bits[63] = int(q0[0]) & 1
+            bits[64] = int(q1[0]) & 1
+            pos = 65
+            for i, v in enumerate(idx):
+                n = 3 if i == 0 else 4
+                put(pos, n, int(v))
+                pos += n
             out[bi] = np.packbits(bits, bitorder="little")
             bi += 1
-    return bytes(out.reshape(-1).tolist())
+    return out.tobytes()
 
 
 def _decode_bc7_np(blocks: bytes, w: int, h: int) -> bytes:
+    """Spec BC7 mode 6 decoder; other modes decode to transparent black."""
     bl = np.frombuffer(blocks, dtype=np.uint8).reshape(-1, 16)
     dst = np.zeros((h, w, 4), dtype=np.uint8)
     bw = w // 4
     for bi in range(bl.shape[0]):
-
-        def bit(pos):
-            return (int(bl[bi, pos // 8]) >> (pos % 8)) & 1
-
-        def getv(pos, ln):
-            return sum(bit(pos + k) << k for k in range(ln))
-
-        p0, p1 = bit(60), bit(61)
-        if bit(3) == 1:
-            # Partition mode (2-subset, proprietary APR)
-            _PAT = [
-                [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
-                [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
-                [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1],
-                [0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0],
-                [0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0],
-                [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1],
-                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
-                [0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-            ]
-            pat = _PAT[min(getv(4, 3), 7)]
-            pp0, pp1 = bit(47), bit(88)
-
-            def _exp5(v5, p):
-                v6 = ((v5 & 0x1F) << 1) | (p & 1)
-                return (v6 << 2) | (v6 >> 4)
-
-            c0a = [_exp5(getv(7 + c * 5, 5), pp0) for c in range(4)]
-            c0b = [_exp5(getv(27 + c * 5, 5), pp0) for c in range(4)]
-            c1a = [_exp5(getv(48 + c * 5, 5), pp1) for c in range(4)]
-            c1b = [_exp5(getv(68 + c * 5, 5), pp1) for c in range(4)]
-
-            def _pal_p(a, b):
-                return np.array(
-                    [
-                        a,
-                        [(2 * int(a[c]) + int(b[c]) + 1) // 3 for c in range(4)],
-                        [(int(a[c]) + 2 * int(b[c]) + 1) // 3 for c in range(4)],
-                        b,
-                    ],
-                    dtype=np.uint8,
-                )
-
-            pal0 = _pal_p(c0a, c0b)
-            pal1 = _pal_p(c1a, c1b)
-            for i in range(16):
-                idx = min(getv(89 + 2 * i, 2), 3)
-                p = pal0 if pat[i] == 0 else pal1
-                dst[bi // bw * 4 + i // 4, bi % bw * 4 + i % 4] = p[idx]
+        if int(bl[bi, 0]) & 0x7F != 0x40:
             continue
-        c0 = np.array(
-            [((getv(4 + c * 7, 7) << 1) | p0) for c in range(4)], dtype=np.int64
-        )
-        c1 = np.array(
-            [((getv(32 + c * 7, 7) << 1) | p1) for c in range(4)], dtype=np.int64
-        )
-        pal = np.stack([c0, (2 * c0 + c1 + 1) // 3, (c0 + 2 * c1 + 1) // 3, c1]).astype(
-            np.uint8
-        )
-        by, bx = bi // bw, bi % bw
+        bits = np.unpackbits(bl[bi], bitorder="little")
+
+        def getv(pos: int, n: int) -> int:
+            return sum(int(bits[pos + k]) << k for k in range(n))
+
+        p0, p1 = int(bits[63]), int(bits[64])
+        e0 = [(getv(7 + c * 14, 7) << 1) | p0 for c in range(4)]
+        e1 = [(getv(14 + c * 14, 7) << 1) | p1 for c in range(4)]
+        pal = _bc7_palette(e0, e1).astype(np.uint8)
+        by, bx = divmod(bi, bw)
+        pos = 65
         for i in range(16):
-            dst[by * 4 + i // 4, bx * 4 + i % 4] = pal[min(getv(62 + 2 * i, 2), 3)]
+            n = 3 if i == 0 else 4
+            dst[by * 4 + i // 4, bx * 4 + i % 4] = pal[getv(pos, n)]
+            pos += n
     return dst.tobytes()
 
 
@@ -594,6 +581,8 @@ def _encode_bcx_np(src: bytes, w: int, h: int) -> bytes:
 def _decode_bcx_np(blocks: bytes, w: int, h: int) -> bytes:
     bw, bh = w // 4, h // 4
     bm = struct.unpack_from("<I", blocks, 0)[0]
+    if bm != (bw * bh + 7) // 8 or len(blocks) < 4 + bm:
+        raise ValueError("BCX bitmap size mismatch")
     bitmap = blocks[4 : 4 + bm]
     pos = 4 + bm
     dst = np.zeros((h, w, 4), dtype=np.uint8)
@@ -602,6 +591,8 @@ def _decode_bcx_np(blocks: bytes, w: int, h: int) -> bytes:
             bi = by * bw + bx
             is7 = (bitmap[bi // 8] >> (bi % 8)) & 1
             bl = 16 if is7 else 8
+            if pos + bl > len(blocks):
+                raise ValueError("BCX payload truncated")
             chunk = blocks[pos : pos + bl]
             if is7:
                 px = np.frombuffer(_decode_bc7_np(chunk, 4, 4), np.uint8).reshape(
@@ -613,6 +604,8 @@ def _decode_bcx_np(blocks: bytes, w: int, h: int) -> bytes:
                 )
             dst[by * 4 : by * 4 + 4, bx * 4 : bx * 4 + 4] = px
             pos += bl
+    if pos != len(blocks):
+        raise ValueError(f"BCX payload length {len(blocks)} != expected {pos}")
     return dst.tobytes()
 
 
@@ -626,9 +619,13 @@ def _fallback_encode(src: bytes, w: int, h: int, fmt: int) -> bytes:
     if fmt == BCN_BCX:
         return _encode_bcx_np(src, w, h)
     arr = np.frombuffer(src, dtype=np.uint8).reshape(h, w, 2)
-    r = _encode_bc4_np(arr[..., 0].tobytes(), w, h)
-    g = _encode_bc4_np(arr[..., 1].tobytes(), w, h)
-    return r + g
+    r = np.frombuffer(_encode_bc4_np(arr[..., 0].tobytes(), w, h), np.uint8).reshape(
+        -1, 8
+    )
+    g = np.frombuffer(_encode_bc4_np(arr[..., 1].tobytes(), w, h), np.uint8).reshape(
+        -1, 8
+    )
+    return np.concatenate([r, g], axis=1).tobytes()  # spec: per-block R then G
 
 
 def _fallback_decode(blocks: bytes, w: int, h: int, fmt: int) -> bytes:
@@ -640,9 +637,9 @@ def _fallback_decode(blocks: bytes, w: int, h: int, fmt: int) -> bytes:
         return _decode_bc7_np(blocks, w, h)
     if fmt == BCN_BCX:
         return _decode_bcx_np(blocks, w, h)
-    half = len(blocks) // 2
-    r = np.frombuffer(_decode_bc4_np(blocks[:half], w, h), dtype=np.uint8)
-    g = np.frombuffer(_decode_bc4_np(blocks[half:], w, h), dtype=np.uint8)
+    pairs = np.frombuffer(blocks, dtype=np.uint8).reshape(-1, 16)
+    r = np.frombuffer(_decode_bc4_np(pairs[:, :8].tobytes(), w, h), dtype=np.uint8)
+    g = np.frombuffer(_decode_bc4_np(pairs[:, 8:].tobytes(), w, h), dtype=np.uint8)
     out = np.empty((h, w, 2), dtype=np.uint8)
     out[..., 0] = r.reshape(h, w)
     out[..., 1] = g.reshape(h, w)

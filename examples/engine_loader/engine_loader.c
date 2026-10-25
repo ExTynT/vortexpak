@@ -8,8 +8,9 @@
  *   1. Open a .vpak archive (seekable VFS)
  *   2. List assets / query metadata
  *   3. Stream a single texture's GPU block data on demand
- *   4. Decode BCX blocks to RGBA pixels (or upload blocks directly)
- *   5. Measure load latency
+ *   4. Read the stored GPU block payload (upload as-is for BC1/BC4/BC5/BC7)
+ *   5. Read decoded RGBA texels (required for storage-only BCX)
+ *   6. Measure load latency
  *
  * Build:  see CMakeLists.txt or compile directly against vortexpak.h
  * Run:    engine_loader <archive.vpak> [texture_name]
@@ -97,10 +98,9 @@ int main(int argc, char **argv) {
     }
     printf("  Raw size: %lld B\n", (long long)raw_size);
 
-    /* Stream the asset with RGBA materialization.
-     * Note: raw_size is the original file size (e.g., PNG), but the
-     * decoded RGBA output is larger. Allocate generously.
-     * In production, you'd query dimensions from the entry metadata. */
+    /* Allocate generously: raw_size is the original file size (e.g. PNG) and
+     * the stored payload can be larger. A production loader would take the
+     * texture dimensions from the entry metadata instead. */
     size_t buf_cap = (size_t)raw_size * 100 + 65536;
     uint8_t *buf = malloc(buf_cap);
     if (!buf) {
@@ -108,69 +108,35 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* a) Stored payload (materialize=0). For BC1/BC4/BC5/BC7 textures this is
+     *    spec-conformant GPU block data: hand it to glCompressedTexImage2D /
+     *    vkCmdCopyBufferToImage as-is. BCX is a storage-only format and must
+     *    go through path b) before upload. */
     t0 = now_ms();
-    int64_t got = vfs_read_asset_c(ark.vfs, target, buf, buf_cap, 1);
-    double t_read = now_ms() - t0;
+    int64_t raw_got = vfs_read_asset_c(ark.vfs, target, buf, buf_cap, 0);
+    double t_raw = now_ms() - t0;
 
-    if (got < 0) {
-        fprintf(stderr, "  Read failed (%lld)\n", (long long)got);
-        free(buf);
-        vpak_close(&ark);
-        return 1;
-    }
-    printf("  Streamed %lld B in %.3f ms (cold, single-asset seek)\n",
-           (long long)got, t_read);
-
-    /* 4. If this is a BCX texture, decode to RGBA */
-    /* In a real engine, you'd upload the raw BCX/BC1/BC7 blocks directly
-     * to the GPU via glCompressedTexImage2D / vkCmdCopyBuffer. Here we
-     * demonstrate the CPU decode path for verification. */
-    size_t n_blocks = (size_t)raw_size / 16; /* upper bound */
-    if (n_blocks > 0 && raw_size > 100) {
-        /* Estimate dimensions from block count (assumes square-ish) */
-        size_t side = 4;
-        while (side * side / 16 < n_blocks) side += 4;
-        size_t w = side, h = side;
-        size_t rgba_size = w * h * 4;
-        uint8_t *rgba = malloc(rgba_size);
-        if (rgba) {
-            t0 = now_ms();
-            int64_t dec = bcn_decode_bcx_c(buf, (size_t)raw_size,
-                                           (uint32_t)w, (uint32_t)h,
-                                           rgba, rgba_size);
-            double t_dec = now_ms() - t0;
-            if (dec > 0) {
-                printf("  BCX decode: %zux%zu RGBA in %.3f ms\n",
-                       w, h, t_dec);
-            }
-            free(rgba);
-        }
-    }
-
-    /* 5. Demonstrate batch streaming (what a level loader does) */
-    printf("\nBatch streaming %zu assets (simulating level load)...\n",
-           n_assets > 10 ? 10 : n_assets);
+    /* b) Fully decoded RGBA texels (materialize=1); the block is now cached. */
     t0 = now_ms();
-    /* In a real engine, you'd iterate all assets and upload to GPU. */
-    /* Here we just measure the VFS overhead of sequential reads. */
-    int loaded = 0;
-    for (size_t i = 0; i < n_assets && i < 10; i++) {
-        /* In practice: get asset name from index, read, upload */
-        loaded++;
-    }
-    double t_batch = now_ms() - t0;
-    printf("  %d assets accessed in %.3f ms\n", loaded, t_batch);
+    int64_t rgba_got = vfs_read_asset_c(ark.vfs, target, buf, buf_cap, 1);
+    double t_rgba = now_ms() - t0;
 
-    /* Cleanup */
     free(buf);
     vpak_close(&ark);
+    if (raw_got < 0 || rgba_got < 0) {
+        fprintf(stderr, "  Read failed (raw %lld, rgba %lld)\n",
+                (long long)raw_got, (long long)rgba_got);
+        return 1;
+    }
+    printf("  Stored payload: %lld B in %.3f ms (cold block)\n",
+           (long long)raw_got, t_raw);
+    printf("  Decoded RGBA:   %lld B in %.3f ms (warm block)\n",
+           (long long)rgba_got, t_rgba);
 
     printf("\n── Key metrics for engine integration ──\n");
     printf("  Archive open (header-only): %.3f ms\n", t_open);
-    printf("  Single-asset cold read:    %.3f ms\n", t_read);
-    printf("  GPU upload path:           direct (blocks are GPU-ready)\n");
-    printf("\nDone. In a real engine, BCX/BC1/BC7 blocks upload directly\n");
-    printf("via glCompressedTexImage2D without CPU-side decoding.\n");
+    printf("  Single-asset cold read:     %.3f ms\n", t_raw);
+    printf("  GPU upload: BC1/BC4/BC5/BC7 payloads directly; BCX via RGBA.\n");
 
     return 0;
 }

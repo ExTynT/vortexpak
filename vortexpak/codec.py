@@ -757,8 +757,9 @@ def _encode_texture_gpu(
     h, w = int(arr.shape[0]), int(arr.shape[1])
     fmt_map = {"bc1": BCN_BC1, "bc5": BCN_BC5, "bc7": BCN_BC7, "bcx": BCN_BCX}
     if gpu_format == "auto":
-        # BC7 carries smooth alpha at 8bpp; BCX adaptively mixes BC1/BC7 per block.
-        candidates = ["bc7", "bcx"] if (arr[..., 3] < 255).any() else ["bcx"]
+        # Only GPU-native formats: BC7 (8bpp) for alpha, BC1 (4bpp) for opaque.
+        # BCX is a storage format (needs a load-time decode) and is opt-in only.
+        candidates = ["bc7", "bc1"] if (arr[..., 3] < 255).any() else ["bc1"]
     elif gpu_format in fmt_map:
         candidates = [gpu_format]
     else:

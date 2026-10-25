@@ -235,7 +235,7 @@ def _run_kodak() -> dict:
     published ISPC/Basis/NVTT baselines."""
     from PIL import Image
 
-    from vortexpak.bcn import BCN_BC1, BCN_BC7, decode_bcn, encode_bcn
+    from vortexpak.bcn import BCN_BC1, BCN_BC7, BCN_BCX, decode_bcn, encode_bcn
 
     files = sorted(KODAK_DIR.glob("kodim*.png"))
     if not files or len(files) < 20:
@@ -249,22 +249,27 @@ def _run_kodak() -> dict:
         ("bc1_max", BCN_BC1, "max", 0.0),
         ("bc1_max_rdo", BCN_BC1, "max", 1.0),
         ("bc7", BCN_BC7, "max", 0.0),
+        ("bcx_storage", BCN_BCX, "max", 0.0),  # storage-only: not GPU-native
     ]
     for cfg_name, fmt, quality, rdo in configs:
         psnrs, flips = [], []
-        t0 = time.perf_counter()
+        enc_s, total_bytes, total_px = 0.0, 0, 0
         for f in files:
             arr = np.array(Image.open(f).convert("RGBA"), dtype=np.uint8)
             h, w = arr.shape[0], arr.shape[1]
             src = arr.tobytes()
+            t0 = time.perf_counter()
             blocks = encode_bcn(src, w, h, fmt, quality=quality, rdo=rdo)
+            enc_s += time.perf_counter() - t0
+            total_bytes += len(blocks)
+            total_px += w * h
             dec = np.frombuffer(decode_bcn(blocks, w, h, fmt), dtype=np.uint8).reshape(
                 h, w, 4
             )
             psnrs.append(_psnr(src, dec.tobytes()))
             flips.append(_flip_score(arr, dec))
-        enc_s = time.perf_counter() - t0
         results[cfg_name] = {
+            "bpp": round(total_bytes * 8 / total_px, 2),
             "psnr_avg_db": round(float(np.mean(psnrs)), 2),
             "psnr_min_db": round(float(np.min(psnrs)), 2),
             "psnr_max_db": round(float(np.max(psnrs)), 2),

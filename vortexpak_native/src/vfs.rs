@@ -65,6 +65,25 @@ impl VortexVfs<File> {
     }
 }
 
+/// Texture tensor flag: payload is GPU block data (see docs/FORMAT.md).
+const TX_BCN: u32 = 1 << 3;
+
+fn decode_bcn_entry(entry: &VfsAssetEntry, payload: &[u8]) -> Result<Vec<u8>, String> {
+    let (h, w) = match entry.tx_shape.as_slice() {
+        [h, w, ..] => (*h, *w),
+        _ => return Err("BCN entry without a (h, w, c) shape".into()),
+    };
+    let fmt = match entry.tx_mode.as_str() {
+        "BC1" => crate::bcn::BCN_BC1,
+        "BC4" => crate::bcn::BCN_BC4,
+        "BC5" => crate::bcn::BCN_BC5,
+        "BC7" => crate::bcn::BCN_BC7,
+        "BCX" => crate::bcn::BCN_BCX,
+        other => return Err(format!("unknown BCN tx_mode {other:?}")),
+    };
+    crate::bcn::bcn_decode(fmt, payload, w, h)
+}
+
 impl<R: Read + Seek> VortexVfs<R> {
     pub fn new(mut reader: R) -> Result<Self, String> {
         // 1. Read and verify magic
@@ -337,6 +356,9 @@ impl<R: Read + Seek> VortexVfs<R> {
                 }
                 out.extend_from_slice(&block_bytes[off..off + len]);
             }
+            if materialize_rgba && entry.is_texture_tensor && entry.tx_flags & TX_BCN != 0 {
+                return decode_bcn_entry(&entry, &out);
+            }
             return Ok(out);
         }
 
@@ -351,6 +373,15 @@ impl<R: Read + Seek> VortexVfs<R> {
         }
         let raw_slice =
             &block_bytes[entry.offset_in_block..entry.offset_in_block + entry.length_in_block];
+
+        if entry.is_texture_tensor && entry.tx_flags & TX_BCN != 0 {
+            // GPU block payload: stored blocks as-is, or decoded texels.
+            return if materialize_rgba {
+                decode_bcn_entry(&entry, raw_slice)
+            } else {
+                Ok(raw_slice.to_vec())
+            };
+        }
 
         if entry.is_texture_tensor {
             let h = if !entry.tx_shape.is_empty() {

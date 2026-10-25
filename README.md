@@ -45,15 +45,16 @@ GPU texture lane (3 585 textures, 183 MB, `--gpu auto` = BC7 for alpha content, 
 
 ### Kodak PhotoCD (industry-standard corpus)
 
-24 images (768×512), the de-facto benchmark for texture codecs since the DXT era. PSNR + NVIDIA FLIP perceptual metric (lower = better; <0.10 = no visible artifact). Results directly comparable with published ISPC/Basis/NVTT numbers.
+24 images (768×512), the de-facto benchmark for texture codecs. PSNR + NVIDIA FLIP perceptual metric (lower = better; <0.10 = no visible artifact). All GPU formats are verified bit-exact against an independent reference decoder in CI, so these numbers are what a GPU actually samples.
 
-| Config | PSNR avg | PSNR worst | FLIP avg | FLIP worst | Speed |
-|---|---:|---:|---:|---:|---:|
-| BC1 MAX | 36.1 dB | 22.2 dB | 0.027 | 0.041 | 5.1 s |
-| BC1 MAX + RDO | **37.4 dB** | **33.1 dB** | 0.026 | 0.041 | 21.4 s |
-| BC7 + APR | **40.5 dB** | **36.1 dB** | **0.022** | **0.032** | 1.7 s |
+| Config | bpp | PSNR avg | PSNR worst | FLIP avg | FLIP worst | Encode (24 img) |
+|---|---:|---:|---:|---:|---:|---:|
+| BC1 MAX | 4 | 34.2 dB | 18.1 dB | 0.031 | 0.067 | 0.3 s |
+| BC1 MAX + RDO | 4 | 36.1 dB | 31.5 dB | 0.028 | 0.046 | 1.3 s |
+| BC7 (mode 6) | 8 | **43.7 dB** | **39.7 dB** | **0.017** | **0.026** | 0.5 s |
+| BCX *(storage-only)* | 4.77 | 40.1 dB | 37.5 dB | 0.022 | 0.029 | 0.8 s |
 
-All configurations are well below the 0.10 FLIP visible-artifact threshold. RDO improves worst-case PSNR by +10.9 dB over plain MAX. **APR (Adaptive Partition Refinement)** — a proprietary 2-subset mode with 8 geometric partition patterns — lifts BC7 by +2.4 dB avg / +2.9 dB worst over single-subset mode 6.
+All configurations are below the 0.10 FLIP visible-artifact threshold. RDO lifts BC1's worst case by +13.4 dB. BCX mixes BC1/BC7 per block for disk size; it is not GPU-native and is decoded at load time.
 
 ![Kodak quality](benchmarks/charts/kodak_quality.png)
 
@@ -73,18 +74,19 @@ Regenerate: `python benchmarks/quality_matrix.py && python benchmarks/generate_q
 
 1. **Format-aware lane packing** — assets are routed to semantic lanes (textures, structured data, scripts, media, 3D) sorted to maximize cross-file matches, then compressed with the proprietary **VXLZ-ANS** codec (Rust, Rayon-parallel) or zstd.
 2. **Lane dictionaries** — repetitive text lanes get a dictionary trained on their own content ([format spec](docs/FORMAT.md) strategies 9/10); blocks are re-emitted as dictionary-seeded zstd frames only when measurably smaller. Random access preserved.
-3. **VXTX-GPU block compression** — PNG/TGA/JPG → BC1 / BC5 / BC7(mode 6) blocks. Endpoint fit: exact 1D-segmentation DP + least-squares refinement (Giesen 2017), multi-axis seeding, exhaustive 565 snap polish; closed-loop RDO optimizes post-codec error. `--gpu auto` picks BC7 vs BC1 per texture by measured PSNR.
+3. **VXTX-GPU block compression** — PNG/TGA/JPG → BC1 / BC4 / BC5 / BC7 (mode 6), bit-exact to the D3D11/Vulkan spec (checked against a reference decoder in CI). BC1 fit: multi-axis seeding, least-squares endpoint refinement (Giesen 2017), greedy 565 polish, AVX2 evaluation; closed-loop RDO optimizes post-codec error. `--gpu auto` picks BC7 for alpha content, BC1 for opaque. Opt-in BCX mixes BC1/BC7 per block for disk size (decoded at load).
 4. **Seekable VFS** — 16-block LRU cache, per-block decompression, XXH3-64 integrity on every asset. Corrupt archives raise clean errors — never crash (fuzz-tested decoder).
 5. **C-ABI** — `vortexpak_native/vortexpak.h` (cbindgen-generated, CI-verified) exposes transforms, parallel decoders, BCn codecs and a native VFS for engines without Python ([examples/c/consumer.c](examples/c/consumer.c)).
 
 ## Current state & roadmap
 
-Done: BC1/BC4/BC5/BC7(mode 6) encode+decode, RDO, auto format selection, lane dictionaries, VFS, hardened parser (58 Python + 26 Rust tests, adversarial fuzz), installable wheel, CI on 3 OS + pure-NumPy fallback.
+Done: spec-conformant BC1/BC4/BC5/BC7 (mode 6) encode+decode, RDO, auto format selection, lane dictionaries, VFS, hardened parser (60 Python + 27 Rust tests, adversarial fuzz, reference-decoder conformance), installable wheel, CI on 3 OS + pure-NumPy fallback.
 
 | Gap | Status |
 |---|---|
-| SIMD encoder speed | MAX tier ~3 Mpx/s (scalar + Rayon); AVX2/ISPC planned — fast tier is 330+ Mpx/s |
-| Full BC7 (partition modes) | mode 6 only today |
+| SIMD encoder speed | BC1 MAX ~35 Mpx/s (AVX2 evaluation + Rayon); fast tier 400+ Mpx/s |
+| Full BC7 | mode 6 only; 2-subset modes (1/3/7) would help two-tone blocks |
+| BCX on GPU | storage-only; needs a load-time decode or BC7 transcode |
 | ASTC/ETC (mobile) | not started — blocked on a reference-decoder conformance oracle |
 | Cold-read tail | p99 8.5 ms — async prefetch / smaller blocks for streaming engines |
 
