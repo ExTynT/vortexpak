@@ -67,9 +67,10 @@ jobs:
       - name: Install cbindgen (pinned to the version that generated the committed header)
         run: cargo install cbindgen --locked --version 0.29.4
       - name: Header is current (regenerate must not diff)
+        working-directory: vortexpak_native
         run: |
-          cbindgen --config vortexpak_native/cbindgen.toml --crate vortexpak_native --output vortexpak_native/vortexpak.h
-          git diff --exit-code vortexpak_native/vortexpak.h
+          cbindgen --config cbindgen.toml --crate vortexpak_native --output vortexpak.h
+          git diff --exit-code vortexpak.h
       - name: Build + run C consumer
         run: |
           cargo build --release --manifest-path vortexpak_native/Cargo.toml
