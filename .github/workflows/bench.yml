@@ -1,0 +1,32 @@
+name: Benchmarks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  bench:
+    name: Full corpus benchmark (Windows, AVX2)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: pip install -e .
+      - name: Run benchmark suite
+        run: python benchmarks/run_benchmarks.py
+      - name: Generate charts
+        run: python benchmarks/generate_charts.py
+      - name: Dynamic quality matrix + dashboard
+        run: |
+          python benchmarks/quality_matrix.py
+          python benchmarks/generate_quality_charts.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmarks/results.json
+            benchmarks/quality_matrix.json
+            benchmarks/charts/
+          if-no-files-found: warn

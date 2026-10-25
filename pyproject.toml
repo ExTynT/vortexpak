@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vortexpak"
+version = "2.1.0"
+description = "VortexPak (VXPK) — format-aware game asset codec, perceptual RDO optimizer and seekable VFS with a Rust/AVX2 native core"
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+authors = [{ name = "VortexPak Contributors" }]
+keywords = ["compression", "game-assets", "textures", "rdo", "vfs", "simd"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Games/Entertainment",
+    "Topic :: System :: Archiving :: Compression",
+]
+dependencies = [
+    "numpy>=1.24",
+    "pillow>=10.0",
+    "xxhash>=3.0",
+    "zstandard>=0.21",
+    "lz4>=4.3",
+]
+
+[project.scripts]
+vortexpak = "vortexpak.cli:main"
+
+[tool.setuptools]
+packages = ["vortexpak"]
+
+[tool.setuptools.package-data]
+vortexpak = ["*.dll", "*.pyd", "*.so", "*.dylib"]

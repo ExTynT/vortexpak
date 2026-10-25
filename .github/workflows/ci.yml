@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-13]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Format
+        run: cargo fmt --check --manifest-path vortexpak_native/Cargo.toml
+      - name: Clippy (informational)
+        run: cargo clippy --release --manifest-path vortexpak_native/Cargo.toml
+      - name: Tests (incl. adversarial decode fuzz)
+        run: cargo test --release --manifest-path vortexpak_native/Cargo.toml
+
+  python:
+    name: Python ${{ matrix.python }} (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-13]
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install (builds native core via cargo)
+        run: pip install -e .
+      - name: Test suite
+        run: python -m unittest discover -s tests -v
+
+  python-no-native:
+    name: Python fallback (no native, arm64)
+    runs-on: macos-14
+    env:
+      VORTEXPAK_DISABLE_NATIVE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Test suite on the pure NumPy path
+        run: python -m unittest discover -s tests -v
+
+  c-abi:
+    name: C header + consumer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cbindgen
+        run: cargo install cbindgen --locked
+      - name: Header is current (regenerate must not diff)
+        run: |
+          cbindgen --config vortexpak_native/cbindgen.toml --crate vortexpak_native --output vortexpak_native/vortexpak.h
+          git diff --exit-code vortexpak_native/vortexpak.h
+      - name: Build + run C consumer
+        run: |
+          cargo build --release --manifest-path vortexpak_native/Cargo.toml
+          gcc -std=c11 -I vortexpak_native examples/c/consumer.c -o consumer -L vortexpak_native/target/release -lvortexpak_native -Wl,-rpath,'$ORIGIN/vortexpak_native/target/release'
+          ./consumer

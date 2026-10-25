@@ -1,0 +1,9 @@
+language = "C"
+include_guard = "VORTEXPAK_NATIVE_H"
+header = "/* VortexPak native C-ABI — generated from c_api.rs with cbindgen. DO NOT EDIT BY HAND. */"
+
+[parse]
+parse_deps = false
+
+[enum]
+prefix_with_name = true

@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+.empryo/
+dist/
+*.egg-info/
+
+# Native build artifacts
+vortexpak_native/target/
+
+# Packaged native libraries (built via wheel / maturin develop, never committed)
+vortexpak/*.dll
+vortexpak/*.so
+vortexpak/*.dylib
+vortexpak/*.pyd
+
+# Benchmark outputs
+benchmarks/games/
+benchmarks/results.json
+benchmarks/quality_matrix.json
+benchmarks/peak_results.json
+benchmarks/peak_*.vpak
