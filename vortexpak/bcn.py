@@ -480,6 +480,48 @@ def _decode_bc7_np(blocks: bytes, w: int, h: int) -> bytes:
             return sum(bit(pos + k) << k for k in range(ln))
 
         p0, p1 = bit(60), bit(61)
+        if bit(3) == 1:
+            # Partition mode (2-subset, proprietary APR)
+            _PAT = [
+                [0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 1, 1, 1],
+                [0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0],
+                [0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 0, 0, 1, 1, 0, 0],
+                [0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1, 1, 0, 1, 1, 1],
+                [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1],
+                [0, 0, 1, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+            ]
+            pat = _PAT[min(getv(4, 3), 7)]
+            pp0, pp1 = bit(47), bit(88)
+
+            def _exp5(v5, p):
+                v6 = ((v5 & 0x1F) << 1) | (p & 1)
+                return (v6 << 2) | (v6 >> 4)
+
+            c0a = [_exp5(getv(7 + c * 5, 5), pp0) for c in range(4)]
+            c0b = [_exp5(getv(27 + c * 5, 5), pp0) for c in range(4)]
+            c1a = [_exp5(getv(48 + c * 5, 5), pp1) for c in range(4)]
+            c1b = [_exp5(getv(68 + c * 5, 5), pp1) for c in range(4)]
+
+            def _pal_p(a, b):
+                return np.array(
+                    [
+                        a,
+                        [(2 * int(a[c]) + int(b[c]) + 1) // 3 for c in range(4)],
+                        [(int(a[c]) + 2 * int(b[c]) + 1) // 3 for c in range(4)],
+                        b,
+                    ],
+                    dtype=np.uint8,
+                )
+
+            pal0 = _pal_p(c0a, c0b)
+            pal1 = _pal_p(c1a, c1b)
+            for i in range(16):
+                idx = min(getv(89 + 2 * i, 2), 3)
+                p = pal0 if pat[i] == 0 else pal1
+                dst[bi // bw * 4 + i // 4, bi % bw * 4 + i % 4] = p[idx]
+            continue
         c0 = np.array(
             [((getv(4 + c * 7, 7) << 1) | p0) for c in range(4)], dtype=np.int64
         )
