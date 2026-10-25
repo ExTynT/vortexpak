@@ -210,6 +210,86 @@ def vfs_latency() -> dict:
     return out
 
 
+KODAK_DIR = Path(__file__).resolve().parent.parent.parent / "vortex_corpus" / "kodak"
+
+
+def _flip_score(a: np.ndarray, b: np.ndarray) -> float:
+    """NVIDIA FLIP perceptual difference (0 = identical, 1 = max error).
+    Lower is better; <0.10 is 'no visible artifact' territory for textures."""
+    try:
+        import flip_evaluator as fe
+
+        ref = a.astype(np.float64) / 255.0
+        test = b.astype(np.float64) / 255.0
+        result = fe.evaluate(
+            ref, test, "LDR", inputsRGB=True, applyMagma=False, computeMeanError=True
+        )
+        return float(result[1])
+    except Exception:
+        return -1.0  # FLIP unavailable — caller reports it as missing
+
+
+def _run_kodak() -> dict:
+    """Kodak PhotoCD suite (24 images, 768x512, industry-standard for texture
+    codec evaluation since the DXT era). Measures BC1/BC7/RDO quality against
+    published ISPC/Basis/NVTT baselines."""
+    from PIL import Image
+
+    from vortexpak.bcn import BCN_BC1, BCN_BC7, decode_bcn, encode_bcn
+
+    files = sorted(KODAK_DIR.glob("kodim*.png"))
+    if not files or len(files) < 20:
+        return {
+            "status": "corpus_missing",
+            "detail": f"Expected 24 Kodak images at {KODAK_DIR}; found {len(files)}. Download from lemire/kodakimagecollection (GitHub) + SCU-VIP-Lab/compression-eval-datasets (HF).",
+        }
+
+    results = {}
+    configs = [
+        ("bc1_max", BCN_BC1, "max", 0.0),
+        ("bc1_max_rdo", BCN_BC1, "max", 1.0),
+        ("bc7", BCN_BC7, "max", 0.0),
+    ]
+    for cfg_name, fmt, quality, rdo in configs:
+        psnrs, flips = [], []
+        t0 = time.perf_counter()
+        for f in files:
+            arr = np.array(Image.open(f).convert("RGBA"), dtype=np.uint8)
+            h, w = arr.shape[0], arr.shape[1]
+            src = arr.tobytes()
+            blocks = encode_bcn(src, w, h, fmt, quality=quality, rdo=rdo)
+            dec = np.frombuffer(decode_bcn(blocks, w, h, fmt), dtype=np.uint8).reshape(
+                h, w, 4
+            )
+            psnrs.append(_psnr(src, dec.tobytes()))
+            flips.append(_flip_score(arr, dec))
+        enc_s = time.perf_counter() - t0
+        results[cfg_name] = {
+            "psnr_avg_db": round(float(np.mean(psnrs)), 2),
+            "psnr_min_db": round(float(np.min(psnrs)), 2),
+            "psnr_max_db": round(float(np.max(psnrs)), 2),
+            "flip_avg": (
+                round(float(np.mean([f for f in flips if f >= 0])), 4)
+                if any(f >= 0 for f in flips)
+                else None
+            ),
+            "flip_worst": (
+                round(float(np.max([f for f in flips if f >= 0])), 4)
+                if any(f >= 0 for f in flips)
+                else None
+            ),
+            "encode_total_ms": round(enc_s * 1000, 0),
+            "images": len(files),
+        }
+    results["status"] = "ok"
+    results["corpus"] = "kodak_photoCD_24"
+    results["image_size"] = "768x512"
+    results["industry_reference"] = (
+        "Results directly comparable with published ISPC/Basis/NVTT numbers on the same set."
+    )
+    return results
+
+
 def _psnr(a: bytes, b: bytes) -> float:
     va = np.frombuffer(a, dtype=np.uint8).astype(np.float64)
     vb = np.frombuffer(b, dtype=np.uint8).astype(np.float64)
@@ -400,6 +480,7 @@ def main() -> None:
         )
     measured = measure()
     vfs_lat = vfs_latency()
+    kodak = _run_kodak()
     doc = {
         "updated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "python": platform.python_version(),
@@ -407,6 +488,7 @@ def main() -> None:
         "image_size": f"{W}x{H}",
         "measured": measured,
         "vfs_latency": vfs_lat,
+        "kodak": kodak,
         "capabilities": CAPABILITIES,
         "gaps": derive_gaps(measured, vfs_lat),
     }

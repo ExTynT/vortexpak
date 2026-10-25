@@ -30,6 +30,11 @@ dependencies = [
     "lz4>=4.3",
 ]
 
+[project.optional-dependencies]
+quality = [
+    "flip-evaluator>=1.7",
+]
+
 [project.scripts]
 vortexpak = "vortexpak.cli:main"
 

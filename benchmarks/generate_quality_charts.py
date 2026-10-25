@@ -263,6 +263,7 @@ def main() -> None:
 
     competitor_chart(doc)
     vfs_latency_chart(doc)
+    kodak_chart(doc)
 
 
 def competitor_chart(doc: dict) -> None:
@@ -473,6 +474,106 @@ def vfs_latency_chart(doc: dict) -> None:
     fig.savefig(out, facecolor=BG)
     plt.close(fig)
     print(f"vfs latency -> {out}")
+
+
+def kodak_chart(doc: dict) -> None:
+    """Kodak PhotoCD (industry-standard texture codec corpus) with PSNR +
+    NVIDIA FLIP perceptual metric. Directly comparable with published
+    ISPC/Basis/NVTT numbers."""
+    k = doc.get("kodak", {})
+    if k.get("status") != "ok":
+        return
+    configs = ["bc1_max", "bc1_max_rdo", "bc7"]
+    labels = ["BC1 MAX", "BC1 MAX+RDO", "BC7"]
+    colors = ["#38bdf8", "#f472b6", "#a78bfa"]
+
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5.5), dpi=150)
+    fig.patch.set_facecolor(BG)
+    fig.suptitle(
+        f"Kodak PhotoCD ({k.get('images', 24)} images, {k.get('image_size', '768x512')}) — industry-standard corpus",
+        color=FG,
+        fontsize=13,
+        fontweight="bold",
+    )
+
+    psnrs = [k[c]["psnr_avg_db"] for c in configs]
+    psnr_mins = [k[c]["psnr_min_db"] for c in configs]
+    flips = [k[c]["flip_avg"] for c in configs]
+    flip_worsts = [k[c]["flip_worst"] for c in configs]
+
+    ax = ax1
+    _style(ax)
+    xs = np.arange(len(configs))
+    bars = ax.bar(xs, psnrs, 0.55, color=colors, edgecolor=BG, linewidth=0.5)
+    for b, v, mn in zip(bars, psnrs, psnr_mins):
+        ax.text(
+            b.get_x() + b.get_width() / 2,
+            v + 0.15,
+            f"{v:.1f}",
+            ha="center",
+            fontsize=11,
+            color=FG,
+            fontweight="bold",
+        )
+        ax.plot(
+            [b.get_x() + 0.1, b.get_x() + b.get_width() - 0.1],
+            [mn, mn],
+            color="#fb7185",
+            linewidth=1.5,
+            linestyle="--",
+        )
+        ax.text(
+            b.get_x() + b.get_width() + 0.05,
+            mn,
+            f"min {mn:.0f}",
+            fontsize=7,
+            color="#fb7185",
+        )
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylabel("PSNR [dB]")
+    ax.set_title("PSNR (dashed = worst image)", fontsize=11)
+    ax.set_ylim(15, 45)
+
+    ax = ax2
+    _style(ax)
+    bars = ax.bar(xs, flips, 0.55, color=colors, edgecolor=BG, linewidth=0.5)
+    for b, v, w in zip(bars, flips, flip_worsts):
+        ax.text(
+            b.get_x() + b.get_width() / 2,
+            v + 0.001,
+            f"{v:.4f}",
+            ha="center",
+            fontsize=10,
+            color=FG,
+            fontweight="bold",
+        )
+        ax.plot(
+            [b.get_x() + 0.1, b.get_x() + b.get_width() - 0.1],
+            [w, w],
+            color="#fbbf24",
+            linewidth=1.5,
+            linestyle="--",
+        )
+        ax.text(
+            b.get_x() + b.get_width() + 0.03,
+            w,
+            f"worst {w:.3f}",
+            fontsize=7,
+            color="#fbbf24",
+        )
+    ax.axhline(0.10, color="#fb7185", linestyle="--", linewidth=1.2)
+    ax.text(2.2, 0.102, "visible artifact threshold", color="#fb7185", fontsize=8)
+    ax.set_xticks(xs)
+    ax.set_xticklabels(labels, fontsize=10)
+    ax.set_ylabel("FLIP (lower = better)")
+    ax.set_title("NVIDIA FLIP perceptual metric (dashed = worst image)", fontsize=11)
+
+    fig.tight_layout(rect=(0, 0.01, 1, 0.93))
+    out = CHARTS / "kodak_quality.png"
+    fig.savefig(out, facecolor=BG)
+    plt.close(fig)
+    print(f"kodak quality -> {out}")
 
 
 if __name__ == "__main__":

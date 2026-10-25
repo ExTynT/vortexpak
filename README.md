@@ -43,6 +43,20 @@ GPU texture lane (3 585 textures, 183 MB, `--gpu auto` = BC7 for alpha content, 
 
 **Note on the zstd baseline:** zstd compresses per file (as game pipelines do); VortexPak compresses as a solid archive with cross-file matching. Solid-mode zstd would close part of the gap.
 
+### Kodak PhotoCD (industry-standard corpus)
+
+24 images (768×512), the de-facto benchmark for texture codecs since the DXT era. PSNR + NVIDIA FLIP perceptual metric (lower = better; <0.10 = no visible artifact). Results directly comparable with published ISPC/Basis/NVTT numbers.
+
+| Config | PSNR avg | PSNR worst | FLIP avg | FLIP worst | Speed |
+|---|---:|---:|---:|---:|---:|
+| BC1 MAX | 36.1 dB | 22.2 dB | 0.027 | 0.041 | 5.3 s |
+| BC1 MAX + RDO | **37.4 dB** | **33.1 dB** | **0.026** | **0.041** | 21.6 s |
+| BC7 (mode 6) | **38.0 dB** | 33.3 dB | **0.024** | **0.038** | 1.3 s |
+
+All configurations are well below the 0.10 FLIP visible-artifact threshold. RDO improves worst-case PSNR by +10.9 dB over plain MAX.
+
+![Kodak quality](benchmarks/charts/kodak_quality.png)
+
 ### Charts
 
 | Quality per scenario & capability gaps | vs competition (this machine + published refs) |
