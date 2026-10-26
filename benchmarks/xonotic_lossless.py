@@ -2,7 +2,7 @@
 byte-exact VortexPak strict archive of the whole release must be <= 0.80x the
 shipped download (the sum of the .pk3 ZIP/DEFLATE files). Verified two ways
 (full in-memory decode and per-file engine VFS reads) against SHA-256 of every
-extracted asset; xz -9e and zstd -19 solid streams are the reference bars.
+extracted asset; xz -9e and zstd --ultra -22 solid streams are the reference bars.
 Sizes are deterministic; times are one observation on the recording host.
 
     python benchmarks/xonotic_lossless.py --release ../vortex_corpus/xonotic/Xonotic/data \
@@ -11,6 +11,7 @@ Sizes are deterministic; times are one observation on the recording host.
 """
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import gc
 import hashlib
 import json
@@ -38,7 +39,7 @@ from vortexpak.vfs import VortexVFS  # noqa: E402
 MB = 1e6
 TARGET_NUM = 80  # target = floor(0.80 * download_bytes), computed in integers
 TARGET_DEN = 100
-COMPETITOR_TIMEOUT_S = 3600
+COMPETITOR_TIMEOUT_S = 7200
 
 
 def pct(sorted_vals: List[float], p: float) -> float:
@@ -84,11 +85,15 @@ def run_competitor(tool: str, argv: List[str], out_path: Path) -> Dict[str, Any]
     t0 = time.perf_counter()
     try:
         with open(out_path, "wb") as fh:
-            subprocess.run(
+            r = subprocess.run(
                 argv, stdout=fh, stderr=subprocess.DEVNULL, timeout=COMPETITOR_TIMEOUT_S
             )
     except subprocess.TimeoutExpired:
         rec["status"] = "timeout"
+        rec["seconds"] = round(time.perf_counter() - t0, 1)
+        return rec
+    if r.returncode != 0:
+        rec["status"] = f"error {r.returncode}"
         rec["seconds"] = round(time.perf_counter() - t0, 1)
         return rec
     rec["status"] = "ok"
@@ -234,20 +239,26 @@ def main() -> None:
                 fh.write(data)
         specs = {
             "xz": (
-                ["xz", "-9e", "-T16", "-k", "-c", str(solid)],
+                ["xz", "-9e", "-T1", "-k", "-c", str(solid)],
                 args.work / "solid.xz",
             ),
             "zstd": (
-                ["zstd", "-19", "--long=31", "-T16", "-c", str(solid)],
+                ["zstd", "--ultra", "-22", "--long=31", "-T1", "-c", str(solid)],
                 args.work / "solid.zst",
             ),
         }
-        for tool, (argv, comp_out) in specs.items():
-            rec = run_competitor(tool, argv, comp_out)
-            competitors[tool] = rec
-            print(
-                f"competitor {tool} {rec.get('status')} bytes={rec.get('bytes', '-')} s={rec.get('seconds', '-')}"
-            )
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                (tool, pool.submit(run_competitor, tool, argv, comp_out))
+                for tool, (argv, comp_out) in specs.items()
+            ]
+            for tool, fut in futures:
+                rec = fut.result()
+                competitors[tool] = rec
+                print(
+                    f"competitor {tool} {rec.get('status')} "
+                    f"bytes={rec.get('bytes', '-')} s={rec.get('seconds', '-')}"
+                )
         for p in (solid, args.work / "solid.xz", args.work / "solid.zst"):
             p.unlink(missing_ok=True)
 
@@ -325,6 +336,12 @@ def main() -> None:
 
     xz_rec, zst_rec = competitors.get("xz"), competitors.get("zstd")
     verdict = "PASS" if passed else "FAIL"
+    best_name: Optional[str] = None
+    best_bytes: Optional[int] = None
+    for cname, crec in competitors.items():
+        cbytes = crec.get("bytes")
+        if cbytes is not None and (best_bytes is None or cbytes < best_bytes):
+            best_name, best_bytes = cname, cbytes
     lines = [
         "# Xonotic 0.8.6 lossless repack",
         "",
@@ -336,8 +353,20 @@ def main() -> None:
         row("shipped download (pk3, ZIP/DEFLATE)", download_bytes),
         row("target 0.80x", target_bytes),
         row(f"VortexPak strict {args.layout} ({backend})", vpak_bytes),
-        row("xz -9e solid", xz_rec.get("bytes") if xz_rec else None),
-        row("zstd -19 --long=31 solid", zst_rec.get("bytes") if zst_rec else None),
+        row("xz -9e -T1 solid", xz_rec.get("bytes") if xz_rec else None),
+        row(
+            "zstd --ultra -22 --long=31 -T1 solid",
+            zst_rec.get("bytes") if zst_rec else None,
+        ),
+    ]
+    if best_bytes is not None:
+        delta_pct = (vpak_bytes - best_bytes) / best_bytes * 100.0
+        lines.append("")
+        lines.append(
+            f"Smallest competitor: {best_name} {best_bytes / MB:,.1f} MB; "
+            f"VortexPak is {delta_pct:+.1f} % versus it."
+        )
+    lines += [
         "",
         f"**{verdict}**: VortexPak {vpak_bytes / MB:,.1f} MB = {ratio:.4f}x download "
         f"{'<=' if passed else '>'} target {target_bytes / MB:,.1f} MB.",
@@ -388,6 +417,10 @@ def main() -> None:
         "- One run; sizes are deterministic, times are a single observation on a shared host and indicative only.",
         "- Competitors are solid streams without random access, while VortexPak reads any file individually.",
         "- The solid concatenation carries no per-file headers, which slightly favours the competitors.",
+        "- Competitors run single-threaded at their strongest settings "
+        "(xz -9e, zstd --ultra -22 --long=31); multi-threaded modes lose ratio.",
+        "- Compact layout decodes a whole 16 MiB block per cold single-file read; "
+        "the VFS p99/max above is that cost (use --layout stream for streaming).",
         "",
         "Reproduce with the command in the script docstring.",
         "",

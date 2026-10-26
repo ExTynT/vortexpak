@@ -1,0 +1,369 @@
+{
+ "provenance": {
+  "utc": "2026-10-26T14:40:34.280735+00:00",
+  "platform": "Windows-11-10.0.26300-SP0",
+  "processor": "AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD",
+  "cpu_count": 16,
+  "python": "3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]",
+  "vortexpak_version": "3.2.1",
+  "git_head": "f6355759e7cfa7d5120cc6efa85fb88649b48250",
+  "git_dirty": true,
+  "argv": [
+   "benchmarks\\xonotic_lossless.py",
+   "--release",
+   "..\\vortex_corpus\\xonotic\\Xonotic\\data",
+   "--assets",
+   "..\\vortex_corpus\\xonotic\\xonotic_assets",
+   "--output",
+   "benchmarks\\reports\\v2\\xonotic-lossless",
+   "--work",
+   "C:\\Users\\Ivan\\AppData\\Local\\Temp\\vpak_xonotic"
+  ]
+ },
+ "release": {
+  "pk3_files": {
+   "font-unifont-20230620.pk3": 2839911,
+   "font-xolonium-20230620.pk3": 171388,
+   "xonotic-20230620-data.pk3": 317540306,
+   "xonotic-20230620-maps.pk3": 626168138,
+   "xonotic-20230620-music.pk3": 110697275,
+   "xonotic-20230620-nexcompat.pk3": 125433473,
+   "xonotic-20230620-xoncompat.pk3": 2308299
+  },
+  "download_bytes": 1185158790,
+  "target_bytes": 948127032,
+  "target_factor": 0.8
+ },
+ "assets": {
+  "files": 14597,
+  "raw_bytes": 2471683218,
+  "limit": null
+ },
+ "vortexpak": {
+  "layout": "compact",
+  "backend": "vxcm",
+  "bytes": 924623172,
+  "pack_s": 292.41,
+  "decode_s": 4.33,
+  "x_download": 0.7802
+ },
+ "verify": {
+  "files": 14597,
+  "mismatches_a": 0,
+  "verify_archive_ok": true,
+  "verify_archive_files": 14597,
+  "mismatches_b": 0
+ },
+ "vfs": {
+  "total_s": 229.11,
+  "reads": 14597,
+  "p50_ms": 0.005,
+  "p99_ms": 367.456,
+  "max_ms": 1182.895
+ },
+ "dedup": {
+  "files": 1511,
+  "bytes": 22322735
+ },
+ "breakdown": {
+  "by_strategy": {
+   "11": {
+    "blocks": 147,
+    "raw": 2409305437,
+    "comp": 884192214
+   },
+   "0": {
+    "blocks": 2,
+    "raw": 40121236,
+    "comp": 40121236
+   }
+  },
+  "by_lane": {
+   "LANE_MAP_STRIPE": {
+    "blocks": 14,
+    "raw": 149925331,
+    "comp": 28496565
+   },
+   "LANE_STRUCTURED": {
+    "blocks": 1,
+    "raw": 2804,
+    "comp": 1124
+   },
+   "LANE_SCRIPTS": {
+    "blocks": 114,
+    "raw": 1966863333,
+    "comp": 579536571
+   },
+   "LANE_3D_GEOM": {
+    "blocks": 1,
+    "raw": 1043665,
+    "comp": 189504
+   },
+   "LANE_MEDIA": {
+    "blocks": 19,
+    "raw": 331591540,
+    "comp": 316089686
+   }
+  },
+  "by_extension": {
+   "(none)": {
+    "files": 5,
+    "raw": 7064
+   },
+   ".ase": {
+    "files": 183,
+    "raw": 32412908
+   },
+   ".bgs": {
+    "files": 1,
+    "raw": 16359
+   },
+   ".bsp": {
+    "files": 31,
+    "raw": 201365164
+   },
+   ".cache": {
+    "files": 32,
+    "raw": 1535461
+   },
+   ".cfg": {
+    "files": 117,
+    "raw": 907856
+   },
+   ".cmake": {
+    "files": 3,
+    "raw": 838
+   },
+   ".dat": {
+    "files": 3,
+    "raw": 12441606
+   },
+   ".dds": {
+    "files": 8186,
+    "raw": 1630014253
+   },
+   ".dem": {
+    "files": 2,
+    "raw": 15341273
+   },
+   ".dpm": {
+    "files": 40,
+    "raw": 48801856
+   },
+   ".ent": {
+    "files": 1,
+    "raw": 236551
+   },
+   ".framegroups": {
+    "files": 88,
+    "raw": 53236
+   },
+   ".hardwired": {
+    "files": 32,
+    "raw": 9778
+   },
+   ".in": {
+    "files": 1,
+    "raw": 280
+   },
+   ".iqm": {
+    "files": 137,
+    "raw": 31205921
+   },
+   ".jpg": {
+    "files": 3585,
+    "raw": 182545848
+   },
+   ".license": {
+    "files": 1,
+    "raw": 35149
+   },
+   ".lmp": {
+    "files": 1,
+    "raw": 192
+   },
+   ".lno": {
+    "files": 3,
+    "raw": 8261776
+   },
+   ".map": {
+    "files": 150,
+    "raw": 68198881
+   },
+   ".mapinfo": {
+    "files": 30,
+    "raw": 8044
+   },
+   ".md3": {
+    "files": 294,
+    "raw": 52700240
+   },
+   ".mdl": {
+    "files": 19,
+    "raw": 367044
+   },
+   ".mid": {
+    "files": 1,
+    "raw": 359
+   },
+   ".mp3": {
+    "files": 2,
+    "raw": 3443693
+   },
+   ".obj": {
+    "files": 38,
+    "raw": 1043665
+   },
+   ".ogg": {
+    "files": 846,
+    "raw": 147886466
+   },
+   ".options": {
+    "files": 30,
+    "raw": 2543
+   },
+   ".otf": {
+    "files": 2,
+    "raw": 437724
+   },
+   ".pl": {
+    "files": 7,
+    "raw": 27977
+   },
+   ".po": {
+    "files": 53,
+    "raw": 14240937
+   },
+   ".pot": {
+    "files": 1,
+    "raw": 239685
+   },
+   ".rb": {
+    "files": 1,
+    "raw": 2381
+   },
+   ".rc": {
+    "files": 1,
+    "raw": 346
+   },
+   ".rtlights": {
+    "files": 6,
+    "raw": 2789
+   },
+   ".sh": {
+    "files": 31,
+    "raw": 98907
+   },
+   ".shader": {
+    "files": 186,
+    "raw": 706092
+   },
+   ".skin": {
+    "files": 268,
+    "raw": 12105
+   },
+   ".sounds": {
+    "files": 22,
+    "raw": 30826
+   },
+   ".sp2": {
+    "files": 31,
+    "raw": 2164672
+   },
+   ".spr": {
+    "files": 2,
+    "raw": 2172
+   },
+   ".spr32": {
+    "files": 11,
+    "raw": 12904
+   },
+   ".subr": {
+    "files": 1,
+    "raw": 2284
+   },
+   ".svg": {
+    "files": 1,
+    "raw": 2804
+   },
+   ".ttf": {
+    "files": 1,
+    "raw": 12303504
+   },
+   ".txt": {
+    "files": 66,
+    "raw": 277637
+   },
+   ".wav": {
+    "files": 3,
+    "raw": 70220
+   },
+   ".waypoints": {
+    "files": 32,
+    "raw": 164205
+   },
+   ".width": {
+    "files": 2,
+    "raw": 4686
+   },
+   ".xcf": {
+    "files": 1,
+    "raw": 1092987
+   },
+   ".xpm": {
+    "files": 1,
+    "raw": 2589
+   },
+   ".zh_cn": {
+    "files": 1,
+    "raw": 7761
+   },
+   ".zh_hk": {
+    "files": 1,
+    "raw": 7761
+   },
+   ".zh_tw": {
+    "files": 1,
+    "raw": 7761
+   },
+   ".zym": {
+    "files": 2,
+    "raw": 915198
+   }
+  }
+ },
+ "competitors": {
+  "xz": {
+   "tool": "xz",
+   "argv": [
+    "xz",
+    "-9e",
+    "-T1",
+    "-k",
+    "-c",
+    "C:\\Users\\Ivan\\AppData\\Local\\Temp\\vpak_xonotic\\solid.bin"
+   ],
+   "version": "xz (XZ Utils) 5.8.1",
+   "status": "ok",
+   "seconds": 788.0,
+   "bytes": 951234812
+  },
+  "zstd": {
+   "tool": "zstd",
+   "argv": [
+    "zstd",
+    "--ultra",
+    "-22",
+    "--long=31",
+    "-T1",
+    "-c",
+    "C:\\Users\\Ivan\\AppData\\Local\\Temp\\vpak_xonotic\\solid.bin"
+   ],
+   "version": "*** Zstandard CLI (64-bit) v1.5.7, by Yann Collet ***",
+   "status": "ok",
+   "seconds": 780.1,
+   "bytes": 1014118420
+  }
+ },
+ "pass": true
+}

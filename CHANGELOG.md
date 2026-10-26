@@ -6,6 +6,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.1] - 2026-10-26
+
+### Added
+- Xonotic 0.8.6 lossless result: all 14,597 files byte-exact (SHA-256 after a full
+  decode and after individual VFS reads) in 924,623,172 B = 0.780x the
+  1,185,158,790 B shipped download; the 0.80x goal is met. Competitor bars and
+  timings: benchmarks/reports/v2/xonotic-lossless/RESULTS.md.
+- Roadmap: M23 (lossless Xonotic 0.80x) done; M24 (seekable compact archive) next.
+
+### Changed
+- benchmarks/xonotic_lossless.py: competitors run single-threaded at their strongest
+  settings (xz -9e, zstd --ultra -22 --long=31); a failing tool is reported as an error.
+
+### Known limitations
+- Compact VXCM archives decode a whole 16 MiB block per cold single-file read
+  (Xonotic VFS p99 373 ms, max 1.9 s); use --layout stream for streaming reads.
+
 ## [3.2.0] - 2026-10-26
 
 ### Added

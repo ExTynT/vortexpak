@@ -6,7 +6,7 @@
       {
         "gate": "Size",
         "target": "≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download)",
-        "today": "1,114.5 MB byte-exact (0.94×, default stream layout); 1,077.6 MB with compact (0.91×). Lossless alone cannot reach the target: 27 % of the download is already-compressed .jpg/.ogg."
+        "today": "924.6 MB byte-exact (0.780×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB."
       },
       {
         "gate": "Exact",
@@ -100,6 +100,20 @@
           "status": "done",
           "date": "2026-10-26",
           "evidence": "benchmarks/reports/v2/ab-physical8/RESULTS.md"
+        },
+        {
+          "id": "M23",
+          "title": "Lossless Xonotic 0.80×",
+          "goal": "Byte-exact strict archive of all 14,597 Xonotic 0.8.6 files at ≤ 0.80× the shipped download (948.1 MB): 924.6 MB.",
+          "status": "done",
+          "date": "2026-10-26",
+          "evidence": "benchmarks/reports/v2/xonotic-lossless/RESULTS.md"
+        },
+        {
+          "id": "M24",
+          "title": "Seekable compact archive",
+          "goal": "Keep ≤ 0.80× on Xonotic while a cold single-asset read stays ≤ 5 ms p99 (compact today: 373 ms).",
+          "status": "next"
         }
       ]
     },

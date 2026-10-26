@@ -78,7 +78,7 @@ The legacy capability matrix (`benchmarks/quality_matrix.py`) describes features
 
 | Gate | Target | Today |
 |---|---|---|
-| **Size** | ≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download) | 1,114.5 MB byte-exact (0.94×, default stream layout); 1,077.6 MB with compact (0.91×). Lossless alone cannot reach the target: 27 % of the download is already-compressed .jpg/.ogg. |
+| **Size** | ≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download) | 924.6 MB byte-exact (0.780×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB. |
 | **Exact** | Every non-texture file byte-identical (SHA-256); JPEG recompression bit-exact | Strict mode verified byte-exact on all 14,597 files |
 | **Texture quality** | Every re-encoded DXT texture ≥ 40 dB RGB and alpha against the shipped texture, on every mip level | Shipped .dds (DXT1 982 MB, DXT5 621 MB raw) are opaque data; no DDS ingest, no BC3 (DXT5) encoder, no RDO for existing blocks |
 | **Real game** | Stock Xonotic 0.8.6 runs from the .vpak through a DarkPlaces filesystem backend on a real GPU: every official map loads, a recorded demo plays to the end, zero missing assets | No engine backend; never run on a GPU |
@@ -87,7 +87,7 @@ The legacy capability matrix (`benchmarks/quality_matrix.py`) describes features
 
 Every gate must hold at once, in one reproducible run. [Baseline evidence](benchmarks/reports/v2/north-star/BASELINE.md)
 
-**Progress:** 8 of 22 milestones done (36 %) `███████░░░░░░░░░░░░░`
+**Progress:** 9 of 24 milestones done (38 %) `████████░░░░░░░░░░░░`
 
 ```mermaid
 flowchart LR
@@ -107,6 +107,8 @@ flowchart LR
     M5["✅ M5 · Byte-exact strict mode"]:::done
     M6["✅ M6 · Texture quality floor"]:::done
     M7["✅ M7 · Stream block layout"]:::done
+    M23["✅ M23 · Lossless Xonotic 0.80×"]:::done
+    M24["🔜 M24 · Seekable compact archive"]:::next
   end
   subgraph P3["3 · Engine-ready textures"]
     direction TB
@@ -147,12 +149,14 @@ flowchart LR
 
 </details>
 
-<details>
-<summary><b>Phase 2 · Quality and streaming guarantees</b> · 3/3 ✅</summary>
+<details open>
+<summary><b>Phase 2 · Quality and streaming guarantees</b> · 4/5 🚧</summary>
 
 - [x] **M5 · Byte-exact strict mode** — `--mode strict` restores every byte and rejects the lossy `--rdo` and `--gpu` options. *(2026-10-26)* · [evidence](tests/test_bcn.py)
 - [x] **M6 · Texture quality floor** — `--gpu auto` never ships a texture below the floor (default 35 dB RGB) or with altered opaque alpha. *(2026-10-26)* · [evidence](benchmarks/reports/v2/ab-physical8/RESULTS.md)
 - [x] **M7 · Stream block layout** — Large assets get their own blocks: Kenney single-asset p99 5.96 → 0.36 ms for +0.4 % size. *(2026-10-26)* · [evidence](benchmarks/reports/v2/ab-physical8/RESULTS.md)
+- [x] **M23 · Lossless Xonotic 0.80×** — Byte-exact strict archive of all 14,597 Xonotic 0.8.6 files at ≤ 0.80× the shipped download (948.1 MB): 924.6 MB. *(2026-10-26)* · [evidence](benchmarks/reports/v2/xonotic-lossless/RESULTS.md)
+- [ ] **M24 · Seekable compact archive** — Keep ≤ 0.80× on Xonotic while a cold single-asset read stays ≤ 5 ms p99 (compact today: 373 ms). 🔜 *next*
 
 </details>
 
