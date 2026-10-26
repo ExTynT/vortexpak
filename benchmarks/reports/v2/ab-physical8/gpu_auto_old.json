@@ -1,0 +1,73 @@
+{
+ "implementation": "C:\\Users\\Ivan\\Documents\\antigravity\\mysterious-bose\\benchmarks\\reports\\v2\\build-9800x3d-v2\\snapshot\\vortexpak\\__init__.py",
+ "results": {
+  "minetest": {
+   "default": {
+    "textures": 451,
+    "archive_bytes": 182424,
+    "pack_s": 0.2,
+    "modes": {
+     "BC1": 294,
+     "BC7": 146,
+     "lossless": 11
+    },
+    "gpu_pooled_rgb_psnr_db": 30.84,
+    "gpu_min_rgb_psnr_db": 14.52,
+    "gpu_below_30": 144,
+    "gpu_below_35": 244,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "kenney": {
+   "default": {
+    "textures": 8,
+    "archive_bytes": 876621,
+    "pack_s": 0.5,
+    "modes": {
+     "BC7": 4,
+     "BC1": 3,
+     "lossless": 1
+    },
+    "gpu_pooled_rgb_psnr_db": 42.91,
+    "gpu_min_rgb_psnr_db": 36.99,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "browserquest": {
+   "default": {
+    "textures": 238,
+    "archive_bytes": 2229183,
+    "pack_s": 2.2,
+    "modes": {
+     "BC7": 197,
+     "lossless": 33,
+     "BC1": 8
+    },
+    "gpu_pooled_rgb_psnr_db": 35.49,
+    "gpu_min_rgb_psnr_db": 18.22,
+    "gpu_below_30": 76,
+    "gpu_below_35": 140,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "xonotic": {
+   "default": {
+    "textures": 3118,
+    "archive_bytes": 87637926,
+    "pack_s": 19.1,
+    "modes": {
+     "lossless": 54,
+     "BC7": 35,
+     "BC1": 3029
+    },
+    "gpu_pooled_rgb_psnr_db": 34.92,
+    "gpu_min_rgb_psnr_db": 9.7,
+    "gpu_below_30": 335,
+    "gpu_below_35": 1563,
+    "opaque_alpha_broken": 0
+   }
+  }
+ }
+}

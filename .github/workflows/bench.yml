@@ -1,11 +1,22 @@
-name: Benchmarks
+name: Benchmark protocol smoke
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "benchmarks/rigorous*.py"
+      - "benchmarks/protocol*"
+      - "benchmarks/measurement.py"
+      - "benchmarks/run_reference.py"
+      - "benchmarks/report_*.py"
+      - "tests/test_rigorous*.py"
+      - "tests/test_benchmark_protocol.py"
+      - "docs/BENCHMARKING.md"
+      - ".github/workflows/bench.yml"
 
 jobs:
-  bench:
-    name: Full corpus benchmark (Windows, AVX2)
+  protocol:
+    name: Validate protocol (not performance evidence)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -13,20 +24,26 @@ jobs:
         with:
           python-version: "3.12"
       - uses: dtolnay/rust-toolchain@stable
-      - run: pip install -e .
-      - name: Run benchmark suite
-        run: python benchmarks/run_benchmarks.py
-      - name: Generate charts
-        run: python benchmarks/generate_charts.py
-      - name: Dynamic quality matrix + dashboard
-        run: |
-          python benchmarks/quality_matrix.py
-          python benchmarks/generate_quality_charts.py
+      - run: pip install -e ".[benchmark,quality]"
+      - name: Adapter, worker, statistics and independent quality tests
+        run: python -m unittest discover -s tests -p "test_rigorous*.py" -v
+      - name: Contract, ledger, provenance and instrument tests
+        run: python -m unittest discover -s tests -p "test_benchmark_protocol.py" -v
+      - name: Create explicitly synthetic protocol fixture
+        run: >-
+          python -c "from pathlib import Path; import os,random;
+          p=Path(os.environ['RUNNER_TEMP'])/'benchmark-fixture'; p.mkdir();
+          (p/'script.txt').write_bytes(b'function update() {}\n'*4096);
+          (p/'noise.bin').write_bytes(random.Random(17).randbytes(262144))"
+      - name: Execute all archive adapters (smoke, not publishable timings)
+        run: >-
+          python benchmarks/rigorous.py
+          --corpus "$env:RUNNER_TEMP/benchmark-fixture"
+          --output benchmarks/reports/ci-smoke
+          --profile diagnostic --threads 1 --repeats 2 --warmups 1 --requests 32
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: benchmark-results
-          path: |
-            benchmarks/results.json
-            benchmarks/quality_matrix.json
-            benchmarks/charts/
+          name: protocol-smoke-not-performance-evidence
+          path: benchmarks/reports/ci-smoke/
           if-no-files-found: warn

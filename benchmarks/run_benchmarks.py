@@ -1,4 +1,7 @@
-"""
+"""Legacy exploratory runner, not a validated competitive scoreboard.
+See docs/BENCHMARKING.md for the canonical measurement protocol.
+
+
 Brutal, Realistic & Scientifically Rigorous Benchmark Suite:
 Competitors (Per-File 1T, Solid 1T, Parallel-8T, Ablation & WebP-Lossless) vs VortexPak (VXPK v2.0)
 ===================================================================================================

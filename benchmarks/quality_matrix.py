@@ -1,4 +1,7 @@
-"""
+"""Legacy exploratory runner, not a validated competitive scoreboard.
+See docs/BENCHMARKING.md for the canonical measurement protocol.
+
+
 Dynamic quality/capability matrix for VortexPak GPU block codecs.
 ===============================================================
 

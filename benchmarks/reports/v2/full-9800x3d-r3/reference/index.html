@@ -1,0 +1,695 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>VortexPak — validated evidence</title><style>
+:root{color-scheme:light dark;font:15px/1.55 system-ui,sans-serif}
+body{max-width:1800px;margin:40px auto;padding:0 20px}h1{font-size:2rem}
+nav{display:flex;gap:24px;flex-wrap:wrap;margin:24px 0}
+a{color:light-dark(#1254a5,#83baff)}
+section{border-top:1px solid #8886;padding:30px 0}
+.table-scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:right;border-bottom:1px solid #8884;padding:10px;
+white-space:nowrap;font-variant-numeric:tabular-nums}
+th:first-child{text-align:left}thead{background:#8882}
+tbody tr:nth-child(odd){background:#8881}small{display:block;font-size:11px}
+.metadata{font-family:monospace;overflow-wrap:anywhere;font-size:12px}
+.warning{font-weight:650;border-left:4px solid #888;padding-left:12px}
+</style></head><body><h1>VortexPak — validated evidence</h1>
+<p>Alphabetical, neutral configuration rows. No aggregate score or universal
+winner. Raw files remain unchanged in their original order; only complete
+validated inputs are shown.</p>
+<p>5 validated complete reports; 41 configuration rows.</p><nav><a href="#report-0">browserquest</a> <a href="#report-1">kenney</a> <a href="#report-2">kodak</a> <a href="#report-3">minetest</a> <a href="#report-4">silesia</a></nav><section id="report-0"><h2>browserquest</h2>
+<p class="metadata">Source: C:\Users\Ivan\Documents\antigravity\mysterious-bose\benchmarks\reports\v2\full-9800x3d-r3\reference\browserquest; track: archive; schema: 2; configurations: 9</p>
+<p class="metadata">Profile: reference; case: browserquest</p>
+<p class="metadata">Corpus: 452 files; 72381221 original bytes (69.028 MiB)</p>
+<p class="metadata">Corpus SHA-256: 0702a565fe85fa16f374c531dd14386099a2e669099d74357f7c112a72e60641</p>
+<p class="metadata">repeats: 7; warmups: 1; threads: 1; requests: 10000</p>
+<p class="metadata">run_id: 381a849beea3445694e78167a5e0e2a6</p>
+<p class="metadata">protocol_id: 8bb498a52152a07332b29eff1703b53e2248b5f6895fbc503849277dae62259c</p>
+<p class="metadata">evidence_head: 30d3aa5bee83239c5176a71fcb76410d6004afac0814d5b6fd52f4c999ddd359</p>
+<p class="metadata">CPU: AMD Ryzen 7 9800X3D 8-Core Processor; physical/logical: 8/16</p>
+<p class="metadata">OS: Windows-11-10.0.26300-SP0; Python: 3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]</p>
+<p class="metadata">Power scheme fingerprint: 0d934967fb066580346a3616b7a1980b8a8884f4f993d2ff939278cca96e7843</p>
+<p class="metadata">UTC: 2026-10-26T07:47:01Z; complete environment/source/build details in raw evidence.</p>
+<p class="">Archive size is an exact metric with median/min/max in raw data and no bootstrap CI. CPU N/A means unresolved, not zero.</p>
+<p class="">OS process-lifetime peak working set is cumulative, NOT a phase-local RSS peak or a phase memory delta.</p>
+<p class="">Latency p50/p95/p99/p999/max summaries are medians of per-round statistics, not quantiles or maxima of a pooled request population. Reset clears codec cache, NOT OS/disk cache; repeat follows one prime, not a guaranteed cache hit.</p>
+<p class="warning">EXPLORATORY latency: insufficient or unestablished tail coverage, or diagnostic profile; not a qualified score, population p99 estimate, or SLO evidence.</p>
+<p class="">Tail adequacy flags are COVERAGE ONLY, never SLO qualification: p999_at_least_100_tail_observations_per_trial=false; p99_at_least_100_tail_observations_per_trial=true; tail_flags_are_coverage_not_precision_guarantees=true</p>
+<p class="">Bootstrap 95% intervals, where present, describe rounds conditional on this host/corpus. No population significance, production SLO, cross-hardware claim or universal winner. Consult raw observations and protocol for measured boundaries and limitations.</p>
+<p><a href="browserquest/report.json">Raw observations (original order)</a> · <a href="browserquest/report.json.gz">Existing gzip raw observations</a> · <a href="browserquest/report.md">Markdown</a></p>
+<div class="table-scroll"><table><thead><tr>
+<th>Configuration</th>
+<th>Archive MiB<br>(exact; no CI)</th>
+<th>Ratio ×</th>
+<th>Pack wall ms<br>[95% CI]</th>
+<th>Restore wall ms<br>[95% CI]</th>
+<th>Pack CPU ms</th>
+<th>Restore CPU ms</th>
+<th>Pack OS process-lifetime peak working set MiB</th>
+<th>Restore OS process-lifetime peak working set MiB</th>
+<th>EXPLORATORY Reset<br>median per-round p99 ms<br>[95% CI]</th>
+<th>EXPLORATORY Repeat<br>median per-round p99 ms<br>[95% CI]</th>
+</tr></thead><tbody>
+<tr>
+<th scope="row">indexed-zstd3</th>
+<td>2.799</td>
+<td>24.661</td>
+<td>54.633<small>[54.432, 54.827]</small></td>
+<td>30.326<small>[30.039, 30.604]</small></td>
+<td>62.500</td>
+<td>31.250</td>
+<td>258.512</td>
+<td>258.512</td>
+<td>1.738<small>[1.678, 1.751]</small></td>
+<td>0.013<small>[0.009, 0.014]</small></td>
+</tr>
+<tr>
+<th scope="row">perfile-zstd3</th>
+<td>2.990</td>
+<td>23.083</td>
+<td>61.230<small>[60.657, 66.271]</small></td>
+<td>20.650<small>[20.486, 21.556]</small></td>
+<td>62.500</td>
+<td>N/A</td>
+<td>260.414</td>
+<td>260.414</td>
+<td>0.319<small>[0.316, 0.321]</small></td>
+<td>0.001<small>[0.001, 0.001]</small></td>
+</tr>
+<tr>
+<th scope="row">tar-lz4</th>
+<td>3.699</td>
+<td>18.659</td>
+<td>104.580<small>[103.145, 108.321]</small></td>
+<td>41.418<small>[41.356, 41.484]</small></td>
+<td>93.750</td>
+<td>46.875</td>
+<td>239.352</td>
+<td>239.352</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd19</th>
+<td>2.543</td>
+<td>27.144</td>
+<td>1,186.552<small>[1,180.454, 1,190.012]</small></td>
+<td>42.294<small>[42.079, 42.412]</small></td>
+<td>1,171.875</td>
+<td>46.875</td>
+<td>264.375</td>
+<td>264.375</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd3</th>
+<td>2.749</td>
+<td>25.113</td>
+<td>116.160<small>[115.523, 116.819]</small></td>
+<td>34.693<small>[34.465, 35.106]</small></td>
+<td>109.375</td>
+<td>31.250</td>
+<td>239.805</td>
+<td>239.805</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd9</th>
+<td>2.687</td>
+<td>25.691</td>
+<td>201.550<small>[196.956, 202.697]</small></td>
+<td>48.653<small>[48.358, 49.072]</small></td>
+<td>203.125</td>
+<td>46.875</td>
+<td>240.105</td>
+<td>240.105</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">vpak</th>
+<td>2.774</td>
+<td>24.882</td>
+<td>697.966<small>[695.835, 701.373]</small></td>
+<td>31.676<small>[31.543, 31.888]</small></td>
+<td>687.500</td>
+<td>31.250</td>
+<td>192.344</td>
+<td>192.344</td>
+<td>1.454<small>[1.448, 1.464]</small></td>
+<td>0.007<small>[0.007, 0.008]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-deflate</th>
+<td>3.137</td>
+<td>22.008</td>
+<td>154.495<small>[154.267, 154.822]</small></td>
+<td>32.644<small>[32.396, 32.832]</small></td>
+<td>156.250</td>
+<td>31.250</td>
+<td>117.965</td>
+<td>178.629</td>
+<td>0.457<small>[0.378, 0.462]</small></td>
+<td>0.444<small>[0.366, 0.446]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-store</th>
+<td>69.083</td>
+<td>0.999</td>
+<td>23.862<small>[23.728, 23.939]</small></td>
+<td>13.366<small>[12.944, 13.727]</small></td>
+<td>31.250</td>
+<td>N/A</td>
+<td>249.078</td>
+<td>249.078</td>
+<td>0.062<small>[0.061, 0.068]</small></td>
+<td>0.036<small>[0.034, 0.036]</small></td>
+</tr>
+</tbody></table></div></section>
+<section id="report-1"><h2>kenney</h2>
+<p class="metadata">Source: C:\Users\Ivan\Documents\antigravity\mysterious-bose\benchmarks\reports\v2\full-9800x3d-r3\reference\kenney; track: archive; schema: 2; configurations: 9</p>
+<p class="metadata">Profile: reference; case: kenney</p>
+<p class="metadata">Corpus: 100 files; 5208758 original bytes (4.967 MiB)</p>
+<p class="metadata">Corpus SHA-256: 51fb7d8968929cab11f6fad797dc18df9fa9ed056e1a9bc3aa3dd543effcf08d</p>
+<p class="metadata">repeats: 7; warmups: 1; threads: 1; requests: 10000</p>
+<p class="metadata">run_id: fbb95baf5cca4e24b7001e8deed76b6b</p>
+<p class="metadata">protocol_id: 8bb498a52152a07332b29eff1703b53e2248b5f6895fbc503849277dae62259c</p>
+<p class="metadata">evidence_head: 4840094e94d44dde36e360ebf00270a982712f69114ab13707b933f0e3e3d9a2</p>
+<p class="metadata">CPU: AMD Ryzen 7 9800X3D 8-Core Processor; physical/logical: 8/16</p>
+<p class="metadata">OS: Windows-11-10.0.26300-SP0; Python: 3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]</p>
+<p class="metadata">Power scheme fingerprint: 0d934967fb066580346a3616b7a1980b8a8884f4f993d2ff939278cca96e7843</p>
+<p class="metadata">UTC: 2026-10-26T07:39:30Z; complete environment/source/build details in raw evidence.</p>
+<p class="">Archive size is an exact metric with median/min/max in raw data and no bootstrap CI. CPU N/A means unresolved, not zero.</p>
+<p class="">OS process-lifetime peak working set is cumulative, NOT a phase-local RSS peak or a phase memory delta.</p>
+<p class="">Latency p50/p95/p99/p999/max summaries are medians of per-round statistics, not quantiles or maxima of a pooled request population. Reset clears codec cache, NOT OS/disk cache; repeat follows one prime, not a guaranteed cache hit.</p>
+<p class="warning">EXPLORATORY latency: insufficient or unestablished tail coverage, or diagnostic profile; not a qualified score, population p99 estimate, or SLO evidence.</p>
+<p class="">Tail adequacy flags are COVERAGE ONLY, never SLO qualification: p999_at_least_100_tail_observations_per_trial=false; p99_at_least_100_tail_observations_per_trial=true; tail_flags_are_coverage_not_precision_guarantees=true</p>
+<p class="">Bootstrap 95% intervals, where present, describe rounds conditional on this host/corpus. No population significance, production SLO, cross-hardware claim or universal winner. Consult raw observations and protocol for measured boundaries and limitations.</p>
+<p><a href="kenney/report.json">Raw observations (original order)</a> · <a href="kenney/report.json.gz">Existing gzip raw observations</a> · <a href="kenney/report.md">Markdown</a></p>
+<div class="table-scroll"><table><thead><tr>
+<th>Configuration</th>
+<th>Archive MiB<br>(exact; no CI)</th>
+<th>Ratio ×</th>
+<th>Pack wall ms<br>[95% CI]</th>
+<th>Restore wall ms<br>[95% CI]</th>
+<th>Pack CPU ms</th>
+<th>Restore CPU ms</th>
+<th>Pack OS process-lifetime peak working set MiB</th>
+<th>Restore OS process-lifetime peak working set MiB</th>
+<th>EXPLORATORY Reset<br>median per-round p99 ms<br>[95% CI]</th>
+<th>EXPLORATORY Repeat<br>median per-round p99 ms<br>[95% CI]</th>
+</tr></thead><tbody>
+<tr>
+<th scope="row">indexed-zstd3</th>
+<td>4.297</td>
+<td>1.156</td>
+<td>10.096<small>[10.009, 10.912]</small></td>
+<td>3.041<small>[3.002, 3.084]</small></td>
+<td>N/A</td>
+<td>N/A</td>
+<td>69.902</td>
+<td>69.902</td>
+<td>2.064<small>[2.060, 2.183]</small></td>
+<td>0.053<small>[0.039, 0.384]</small></td>
+</tr>
+<tr>
+<th scope="row">perfile-zstd3</th>
+<td>4.340</td>
+<td>1.145</td>
+<td>15.818<small>[15.744, 15.956]</small></td>
+<td>2.121<small>[2.078, 2.218]</small></td>
+<td>15.625</td>
+<td>N/A</td>
+<td>70.707</td>
+<td>70.707</td>
+<td>0.110<small>[0.091, 0.679]</small></td>
+<td>0.002<small>[0.002, 0.002]</small></td>
+</tr>
+<tr>
+<th scope="row">tar-lz4</th>
+<td>4.412</td>
+<td>1.126</td>
+<td>11.124<small>[10.794, 12.297]</small></td>
+<td>4.207<small>[4.108, 4.354]</small></td>
+<td>N/A</td>
+<td>N/A</td>
+<td>60.676</td>
+<td>60.676</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd19</th>
+<td>4.261</td>
+<td>1.166</td>
+<td>385.684<small>[368.717, 414.954]</small></td>
+<td>4.938<small>[4.753, 5.037]</small></td>
+<td>375.000</td>
+<td>N/A</td>
+<td>137.207</td>
+<td>137.207</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd3</th>
+<td>4.296</td>
+<td>1.156</td>
+<td>17.516<small>[17.406, 19.416]</small></td>
+<td>4.177<small>[4.050, 4.250]</small></td>
+<td>15.625</td>
+<td>N/A</td>
+<td>57.332</td>
+<td>57.332</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd9</th>
+<td>4.288</td>
+<td>1.159</td>
+<td>22.149<small>[21.780, 22.398]</small></td>
+<td>3.961<small>[3.730, 4.116]</small></td>
+<td>15.625</td>
+<td>N/A</td>
+<td>66.613</td>
+<td>66.613</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">vpak</th>
+<td>4.257</td>
+<td>1.167</td>
+<td>400.788<small>[396.906, 408.225]</small></td>
+<td>8.245<small>[8.210, 8.285]</small></td>
+<td>375.000</td>
+<td>N/A</td>
+<td>82.398</td>
+<td>82.398</td>
+<td>6.032<small>[5.986, 6.221]</small></td>
+<td>0.021<small>[0.013, 0.326]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-deflate</th>
+<td>4.340</td>
+<td>1.145</td>
+<td>97.451<small>[96.356, 99.490]</small></td>
+<td>9.264<small>[9.206, 9.797]</small></td>
+<td>93.750</td>
+<td>N/A</td>
+<td>56.148</td>
+<td>59.020</td>
+<td>0.190<small>[0.147, 5.792]</small></td>
+<td>0.126<small>[0.113, 5.803]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-store</th>
+<td>4.979</td>
+<td>0.998</td>
+<td>2.765<small>[2.639, 2.937]</small></td>
+<td>2.518<small>[2.483, 2.566]</small></td>
+<td>N/A</td>
+<td>N/A</td>
+<td>57.832</td>
+<td>57.832</td>
+<td>0.119<small>[0.062, 0.582]</small></td>
+<td>0.063<small>[0.041, 0.564]</small></td>
+</tr>
+</tbody></table></div></section>
+<section id="report-2"><h2>kodak</h2>
+<p class="metadata">Source: C:\Users\Ivan\Documents\antigravity\mysterious-bose\benchmarks\reports\v2\full-9800x3d-r3\reference\kodak; track: quality; schema: 2; configurations: 5</p>
+<p class="metadata">Profile: reference; case: kodak</p>
+<p class="metadata">Corpus: 24 files; 15394305 original bytes (14.681 MiB)</p>
+<p class="metadata">Corpus SHA-256: 08eb9dcaaceb1e88e4c177aee3b7cc41b84e358c839fae2c4091dd03d7df849f</p>
+<p class="metadata">repeats: 7; warmups: 1; threads: 1; requests: 0</p>
+<p class="metadata">run_id: 49cb8243a335484781d3d956164bcb04</p>
+<p class="metadata">protocol_id: 8bb498a52152a07332b29eff1703b53e2248b5f6895fbc503849277dae62259c</p>
+<p class="metadata">evidence_head: cb85476277c1b9d6600797149a509f2f56fe145bfb1ad2bf711c3354fa3ccfe3</p>
+<p class="metadata">CPU: AMD Ryzen 7 9800X3D 8-Core Processor; physical/logical: 8/16</p>
+<p class="metadata">OS: Windows-11-10.0.26300-SP0; Python: 3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]</p>
+<p class="metadata">Power scheme fingerprint: 0d934967fb066580346a3616b7a1980b8a8884f4f993d2ff939278cca96e7843</p>
+<p class="metadata">UTC: 2026-10-26T08:12:28Z; complete environment/source/build details in raw evidence.</p>
+<p class="">Lossy quality is separate from byte-exact archives. Rate, RGB PSNR, FLIP and encode cost are different trade-offs. FLIP has no universal invisibility threshold; these tables establish no cross-vendor or actual-GPU quality claim.</p>
+<p class="">Bootstrap 95% intervals, where present, describe rounds conditional on this host/corpus. No population significance, production SLO, cross-hardware claim or universal winner. Consult raw observations and protocol for measured boundaries and limitations.</p>
+<p><a href="kodak/report.json">Raw observations (original order)</a> · <a href="kodak/report.json.gz">Existing gzip raw observations</a> · <a href="kodak/report.md">Markdown</a></p>
+<div class="table-scroll"><table><thead><tr>
+<th>Configuration</th>
+<th>bpp</th>
+<th>RGB PSNR dB</th>
+<th>Worst image RGB PSNR dB</th>
+<th>FLIP mean</th>
+<th>FLIP worst</th>
+<th>Encode ms<br>[95% CI]</th>
+</tr></thead><tbody>
+<tr>
+<th scope="row">bc1-fast</th>
+<td>4.000</td>
+<td>34.619</td>
+<td>31.009</td>
+<td>0.05255</td>
+<td>0.07251</td>
+<td>218.507<small>[218.473, 219.423]</small></td>
+</tr>
+<tr>
+<th scope="row">bc1-max</th>
+<td>4.000</td>
+<td>35.231</td>
+<td>31.373</td>
+<td>0.04297</td>
+<td>0.06245</td>
+<td>3,749.420<small>[3,748.345, 3,752.061]</small></td>
+</tr>
+<tr>
+<th scope="row">bc1-max-rdo</th>
+<td>4.000</td>
+<td>35.249</td>
+<td>31.381</td>
+<td>0.04287</td>
+<td>0.06237</td>
+<td>17,007.268<small>[16,997.152, 17,011.460]</small></td>
+</tr>
+<tr>
+<th scope="row">bc7-mode6</th>
+<td>8.000</td>
+<td>41.961</td>
+<td>38.467</td>
+<td>0.02393</td>
+<td>0.03349</td>
+<td>5,715.690<small>[5,713.331, 5,717.684]</small></td>
+</tr>
+<tr>
+<th scope="row">bcx-storage</th>
+<td>4.668</td>
+<td>38.557</td>
+<td>36.190</td>
+<td>0.03623</td>
+<td>0.04346</td>
+<td>9,511.206<small>[9,509.409, 9,517.344]</small></td>
+</tr>
+</tbody></table></div></section>
+<section id="report-3"><h2>minetest</h2>
+<p class="metadata">Source: C:\Users\Ivan\Documents\antigravity\mysterious-bose\benchmarks\reports\v2\full-9800x3d-r3\reference\minetest; track: archive; schema: 2; configurations: 9</p>
+<p class="metadata">Profile: reference; case: minetest</p>
+<p class="metadata">Corpus: 1434 files; 5342715 original bytes (5.095 MiB)</p>
+<p class="metadata">Corpus SHA-256: e1cdb3af9b6381a39f2978ac6c2aadfa8a89e89aeaee4897c4ba56041934d31b</p>
+<p class="metadata">repeats: 7; warmups: 1; threads: 1; requests: 10000</p>
+<p class="metadata">run_id: dc1fc94fa0394af5a700571dddbaa4b2</p>
+<p class="metadata">protocol_id: 8bb498a52152a07332b29eff1703b53e2248b5f6895fbc503849277dae62259c</p>
+<p class="metadata">evidence_head: a9a0dfabd151b1f8c1691193834eb614a11ae1be99f34427be6cefa559089856</p>
+<p class="metadata">CPU: AMD Ryzen 7 9800X3D 8-Core Processor; physical/logical: 8/16</p>
+<p class="metadata">OS: Windows-11-10.0.26300-SP0; Python: 3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]</p>
+<p class="metadata">Power scheme fingerprint: 0d934967fb066580346a3616b7a1980b8a8884f4f993d2ff939278cca96e7843</p>
+<p class="metadata">UTC: 2026-10-26T07:33:30Z; complete environment/source/build details in raw evidence.</p>
+<p class="">Archive size is an exact metric with median/min/max in raw data and no bootstrap CI. CPU N/A means unresolved, not zero.</p>
+<p class="">OS process-lifetime peak working set is cumulative, NOT a phase-local RSS peak or a phase memory delta.</p>
+<p class="">Latency p50/p95/p99/p999/max summaries are medians of per-round statistics, not quantiles or maxima of a pooled request population. Reset clears codec cache, NOT OS/disk cache; repeat follows one prime, not a guaranteed cache hit.</p>
+<p class="warning">EXPLORATORY latency: insufficient or unestablished tail coverage, or diagnostic profile; not a qualified score, population p99 estimate, or SLO evidence.</p>
+<p class="">Tail adequacy flags are COVERAGE ONLY, never SLO qualification: p999_at_least_100_tail_observations_per_trial=false; p99_at_least_100_tail_observations_per_trial=true; tail_flags_are_coverage_not_precision_guarantees=true</p>
+<p class="">Bootstrap 95% intervals, where present, describe rounds conditional on this host/corpus. No population significance, production SLO, cross-hardware claim or universal winner. Consult raw observations and protocol for measured boundaries and limitations.</p>
+<p><a href="minetest/report.json">Raw observations (original order)</a> · <a href="minetest/report.json.gz">Existing gzip raw observations</a> · <a href="minetest/report.md">Markdown</a></p>
+<div class="table-scroll"><table><thead><tr>
+<th>Configuration</th>
+<th>Archive MiB<br>(exact; no CI)</th>
+<th>Ratio ×</th>
+<th>Pack wall ms<br>[95% CI]</th>
+<th>Restore wall ms<br>[95% CI]</th>
+<th>Pack CPU ms</th>
+<th>Restore CPU ms</th>
+<th>Pack OS process-lifetime peak working set MiB</th>
+<th>Restore OS process-lifetime peak working set MiB</th>
+<th>EXPLORATORY Reset<br>median per-round p99 ms<br>[95% CI]</th>
+<th>EXPLORATORY Repeat<br>median per-round p99 ms<br>[95% CI]</th>
+</tr></thead><tbody>
+<tr>
+<th scope="row">indexed-zstd3</th>
+<td>2.384</td>
+<td>2.137</td>
+<td>17.053<small>[16.955, 17.102]</small></td>
+<td>7.720<small>[7.693, 7.791]</small></td>
+<td>15.625</td>
+<td>N/A</td>
+<td>65.699</td>
+<td>65.699</td>
+<td>1.571<small>[1.557, 1.581]</small></td>
+<td>0.005<small>[0.004, 0.005]</small></td>
+</tr>
+<tr>
+<th scope="row">perfile-zstd3</th>
+<td>2.866</td>
+<td>1.778</td>
+<td>50.093<small>[49.411, 50.678]</small></td>
+<td>10.062<small>[9.982, 10.256]</small></td>
+<td>46.875</td>
+<td>N/A</td>
+<td>70.848</td>
+<td>70.848</td>
+<td>0.021<small>[0.018, 0.024]</small></td>
+<td>0.001<small>[0.001, 0.001]</small></td>
+</tr>
+<tr>
+<th scope="row">tar-lz4</th>
+<td>2.844</td>
+<td>1.792</td>
+<td>40.987<small>[40.749, 41.740]</small></td>
+<td>26.324<small>[26.215, 26.693]</small></td>
+<td>31.250</td>
+<td>31.250</td>
+<td>59.441</td>
+<td>59.441</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd19</th>
+<td>2.153</td>
+<td>2.367</td>
+<td>738.257<small>[737.069, 742.059]</small></td>
+<td>27.528<small>[27.196, 27.628]</small></td>
+<td>718.750</td>
+<td>31.250</td>
+<td>137.012</td>
+<td>137.012</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd3</th>
+<td>2.343</td>
+<td>2.174</td>
+<td>48.329<small>[48.099, 48.547]</small></td>
+<td>27.649<small>[27.319, 29.524]</small></td>
+<td>46.875</td>
+<td>31.250</td>
+<td>58.781</td>
+<td>58.781</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd9</th>
+<td>2.210</td>
+<td>2.305</td>
+<td>75.568<small>[75.252, 76.810]</small></td>
+<td>26.885<small>[26.554, 27.332]</small></td>
+<td>78.125</td>
+<td>31.250</td>
+<td>66.367</td>
+<td>66.367</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">vpak</th>
+<td>2.293</td>
+<td>2.222</td>
+<td>342.085<small>[340.519, 344.294]</small></td>
+<td>17.730<small>[17.594, 17.742]</small></td>
+<td>343.750</td>
+<td>15.625</td>
+<td>64.602</td>
+<td>64.602</td>
+<td>0.832<small>[0.823, 0.850]</small></td>
+<td>0.005<small>[0.004, 0.005]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-deflate</th>
+<td>3.003</td>
+<td>1.697</td>
+<td>91.395<small>[90.933, 91.655]</small></td>
+<td>25.400<small>[25.259, 25.625]</small></td>
+<td>78.125</td>
+<td>31.250</td>
+<td>54.453</td>
+<td>54.453</td>
+<td>0.087<small>[0.081, 0.101]</small></td>
+<td>0.065<small>[0.065, 0.071]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-store</th>
+<td>5.297</td>
+<td>0.962</td>
+<td>14.739<small>[14.654, 14.882]</small></td>
+<td>15.309<small>[15.101, 15.413]</small></td>
+<td>15.625</td>
+<td>15.625</td>
+<td>58.047</td>
+<td>58.047</td>
+<td>0.038<small>[0.036, 0.039]</small></td>
+<td>0.012<small>[0.012, 0.012]</small></td>
+</tr>
+</tbody></table></div></section>
+<section id="report-4"><h2>silesia</h2>
+<p class="metadata">Source: C:\Users\Ivan\Documents\antigravity\mysterious-bose\benchmarks\reports\v2\full-9800x3d-r3\reference\silesia; track: archive; schema: 2; configurations: 9</p>
+<p class="metadata">Profile: reference; case: silesia</p>
+<p class="metadata">Corpus: 12 files; 211938580 original bytes (202.120 MiB)</p>
+<p class="metadata">Corpus SHA-256: 319dd01d676ca8828d5ae5a15b236bca5d7ec4d55b8b9e3c7f6eec2aa3fe55ca</p>
+<p class="metadata">repeats: 7; warmups: 1; threads: 1; requests: 100</p>
+<p class="metadata">run_id: 8ed927ea7eeb43098e6df9f0e3278f1a</p>
+<p class="metadata">protocol_id: 8bb498a52152a07332b29eff1703b53e2248b5f6895fbc503849277dae62259c</p>
+<p class="metadata">evidence_head: c7c957f29d35baba0da4f6cd050b0f0c4685a264c036fb506a5b6510ff4a7c48</p>
+<p class="metadata">CPU: AMD Ryzen 7 9800X3D 8-Core Processor; physical/logical: 8/16</p>
+<p class="metadata">OS: Windows-11-10.0.26300-SP0; Python: 3.14.0 (tags/v3.14.0:ebf955d, Oct  7 2025, 10:15:03) [MSC v.1944 64 bit (AMD64)]</p>
+<p class="metadata">Power scheme fingerprint: 0d934967fb066580346a3616b7a1980b8a8884f4f993d2ff939278cca96e7843</p>
+<p class="metadata">UTC: 2026-10-26T07:55:55Z; complete environment/source/build details in raw evidence.</p>
+<p class="">Archive size is an exact metric with median/min/max in raw data and no bootstrap CI. CPU N/A means unresolved, not zero.</p>
+<p class="">OS process-lifetime peak working set is cumulative, NOT a phase-local RSS peak or a phase memory delta.</p>
+<p class="">Latency p50/p95/p99/p999/max summaries are medians of per-round statistics, not quantiles or maxima of a pooled request population. Reset clears codec cache, NOT OS/disk cache; repeat follows one prime, not a guaranteed cache hit.</p>
+<p class="warning">EXPLORATORY latency: insufficient or unestablished tail coverage, or diagnostic profile; not a qualified score, population p99 estimate, or SLO evidence.</p>
+<p class="">Tail adequacy flags are COVERAGE ONLY, never SLO qualification: p999_at_least_100_tail_observations_per_trial=false; p99_at_least_100_tail_observations_per_trial=false; tail_flags_are_coverage_not_precision_guarantees=true</p>
+<p class="">Bootstrap 95% intervals, where present, describe rounds conditional on this host/corpus. No population significance, production SLO, cross-hardware claim or universal winner. Consult raw observations and protocol for measured boundaries and limitations.</p>
+<p><a href="silesia/report.json">Raw observations (original order)</a> · <a href="silesia/report.json.gz">Existing gzip raw observations</a> · <a href="silesia/report.md">Markdown</a></p>
+<div class="table-scroll"><table><thead><tr>
+<th>Configuration</th>
+<th>Archive MiB<br>(exact; no CI)</th>
+<th>Ratio ×</th>
+<th>Pack wall ms<br>[95% CI]</th>
+<th>Restore wall ms<br>[95% CI]</th>
+<th>Pack CPU ms</th>
+<th>Restore CPU ms</th>
+<th>Pack OS process-lifetime peak working set MiB</th>
+<th>Restore OS process-lifetime peak working set MiB</th>
+<th>EXPLORATORY Reset<br>median per-round p99 ms<br>[95% CI]</th>
+<th>EXPLORATORY Repeat<br>median per-round p99 ms<br>[95% CI]</th>
+</tr></thead><tbody>
+<tr>
+<th scope="row">indexed-zstd3</th>
+<td>63.717</td>
+<td>3.172</td>
+<td>779.807<small>[779.668, 788.398]</small></td>
+<td>247.417<small>[246.917, 247.975]</small></td>
+<td>781.250</td>
+<td>250.000</td>
+<td>843.816</td>
+<td>843.816</td>
+<td>66.900<small>[66.674, 70.647]</small></td>
+<td>67.708<small>[67.602, 68.329]</small></td>
+</tr>
+<tr>
+<th scope="row">perfile-zstd3</th>
+<td>63.074</td>
+<td>3.204</td>
+<td>771.322<small>[770.049, 774.292]</small></td>
+<td>220.673<small>[219.825, 222.009]</small></td>
+<td>765.625</td>
+<td>218.750</td>
+<td>838.473</td>
+<td>838.473</td>
+<td>60.157<small>[57.169, 61.169]</small></td>
+<td>0.006<small>[0.006, 0.006]</small></td>
+</tr>
+<tr>
+<th scope="row">tar-lz4</th>
+<td>96.236</td>
+<td>2.100</td>
+<td>546.736<small>[543.434, 547.643]</small></td>
+<td>129.874<small>[129.401, 130.539]</small></td>
+<td>546.875</td>
+<td>125.000</td>
+<td>638.660</td>
+<td>638.660</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd19</th>
+<td>50.395</td>
+<td>4.011</td>
+<td>54,269.933<small>[54,188.009, 54,625.242]</small></td>
+<td>258.450<small>[258.061, 264.154]</small></td>
+<td>53,765.625</td>
+<td>265.625</td>
+<td>630.512</td>
+<td>630.512</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd3</th>
+<td>63.069</td>
+<td>3.205</td>
+<td>939.504<small>[936.422, 945.504]</small></td>
+<td>251.606<small>[250.817, 254.732]</small></td>
+<td>921.875</td>
+<td>250.000</td>
+<td>630.336</td>
+<td>630.336</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">tar-zstd9</th>
+<td>56.337</td>
+<td>3.588</td>
+<td>3,396.684<small>[3,320.102, 3,421.939]</small></td>
+<td>241.186<small>[240.485, 242.935]</small></td>
+<td>3,375.000</td>
+<td>250.000</td>
+<td>630.461</td>
+<td>630.461</td>
+<td>N/A (no random-access score)</td>
+<td>N/A (no random-access score)</td>
+</tr>
+<tr>
+<th scope="row">vpak</th>
+<td>57.919</td>
+<td>3.490</td>
+<td>10,386.573<small>[10,378.416, 10,395.434]</small></td>
+<td>493.861<small>[493.544, 498.770]</small></td>
+<td>10,312.500</td>
+<td>500.000</td>
+<td>566.918</td>
+<td>566.918</td>
+<td>134.115<small>[133.331, 135.079]</small></td>
+<td>135.126<small>[133.895, 138.429]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-deflate</th>
+<td>65.655</td>
+<td>3.079</td>
+<td>2,572.977<small>[2,569.063, 2,573.534]</small></td>
+<td>257.329<small>[256.758, 258.063]</small></td>
+<td>2,546.875</td>
+<td>265.625</td>
+<td>362.797</td>
+<td>362.797</td>
+<td>74.672<small>[74.181, 79.105]</small></td>
+<td>74.559<small>[74.277, 74.926]</small></td>
+</tr>
+<tr>
+<th scope="row">zip-store</th>
+<td>202.121</td>
+<td>1.000</td>
+<td>130.191<small>[129.494, 130.507]</small></td>
+<td>24.715<small>[24.698, 24.955]</small></td>
+<td>125.000</td>
+<td>31.250</td>
+<td>622.211</td>
+<td>622.211</td>
+<td>10.511<small>[10.330, 10.812]</small></td>
+<td>10.458<small>[10.445, 10.654]</small></td>
+</tr>
+</tbody></table></div></section></body></html>

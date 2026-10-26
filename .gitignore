@@ -25,3 +25,23 @@ benchmarks/results.json
 benchmarks/quality_matrix.json
 benchmarks/peak_results.json
 benchmarks/peak_*.vpak
+benchmarks/reports/**/report.json
+benchmarks/reports/**/manifest.json
+
+# v2 benchmark evidence: summaries and the qualified reference's compressed raw
+# reports are tracked; full bundles (implementation/DLL snapshots, harness
+# copies, per-trial files, logs) and failed/stopped/canary runs stay local.
+benchmarks/reports/v2/**/implementation/
+benchmarks/reports/v2/**/harness/
+benchmarks/reports/v2/**/trials/
+benchmarks/reports/v2/**/snapshot/
+benchmarks/reports/v2/**/*.log
+benchmarks/reports/v2/**/events.jsonl
+benchmarks/reports/v2/**/failure.json
+benchmarks/reports/v2/**/report.json.gz
+!benchmarks/reports/v2/full-9800x3d-r3/optimized/*/report.json.gz
+benchmarks/reports/v2/full-9800x3d/
+benchmarks/reports/v2/full-9800x3d-r2/
+benchmarks/reports/v2/canary*
+benchmarks/reports/v2/build-9800x3d/
+benchmarks/reports/v2-measurement.lock

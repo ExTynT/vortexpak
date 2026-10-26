@@ -31,6 +31,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+benchmark = ["psutil>=5.9"]
 quality = [
     "flip-evaluator>=1.7",
 ]

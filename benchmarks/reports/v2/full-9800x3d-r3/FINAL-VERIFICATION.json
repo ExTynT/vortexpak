@@ -1,0 +1,49 @@
+{
+  "status": "verified",
+  "suite_sha256": "dad9cbfd518735c746934616beb70aae12c4b7430dc7b036943fb585af61c7af",
+  "protocol_id": "8bb498a52152a07332b29eff1703b53e2248b5f6895fbc503849277dae62259c",
+  "case_equivalence": {
+    "browserquest": {
+      "compared_measured_trials": 63,
+      "compared_warmup_trials": 9,
+      "equivalent": true,
+      "scope": "exact outputs/quality/coverage; no timing equality or codec-speed claim"
+    },
+    "kenney": {
+      "compared_measured_trials": 63,
+      "compared_warmup_trials": 9,
+      "equivalent": true,
+      "scope": "exact outputs/quality/coverage; no timing equality or codec-speed claim"
+    },
+    "kodak": {
+      "compared_measured_trials": 35,
+      "compared_warmup_trials": 5,
+      "equivalent": true,
+      "scope": "exact outputs/quality/coverage; no timing equality or codec-speed claim"
+    },
+    "minetest": {
+      "compared_measured_trials": 63,
+      "compared_warmup_trials": 9,
+      "equivalent": true,
+      "scope": "exact outputs/quality/coverage; no timing equality or codec-speed claim"
+    },
+    "silesia": {
+      "compared_measured_trials": 63,
+      "compared_warmup_trials": 9,
+      "equivalent": true,
+      "scope": "exact outputs/quality/coverage; no timing equality or codec-speed claim"
+    }
+  },
+  "checks": {
+    "tests": 0,
+    "testsTail": "w_rle_roundtrip (test_vortexpak.TestVortexPakNativeSIMD.test_row_rle_roundtrip) ... ok\r\ntest_vxlz_ans_proprietary_roundtrip (test_vortexpak.TestVortexPakNativeSIMD.test_vxlz_ans_proprietary_roundtrip)\r\nTest our 100% proprietary VXLZ-ANS (6-stream LZ + 8-way rANS + AVX2 Sub-Green) codec. ... ok\r\n\r\n----------------------------------------------------------------------\r\nRan 88 tests in 9.616s\r\n\r\nOK\r\n",
+    "lint": 0,
+    "mypy": 0
+  },
+  "images": {
+    "width": 3026,
+    "height": 9788
+  },
+  "scope": "verified frozen receipted implementation; current workspace test results recorded separately",
+  "current_workspace_matches_receipted_sources": true
+}

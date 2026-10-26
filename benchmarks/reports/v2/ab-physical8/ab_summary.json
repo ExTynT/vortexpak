@@ -1,0 +1,520 @@
+{
+ "minetest": {
+  "size_old": 2404335,
+  "size_new": 2490212,
+  "size_pct": 3.57,
+  "pack_ms": [
+   112.8,
+   129.6
+  ],
+  "restore_ms": [
+   11.95,
+   11.91
+  ],
+  "reset_p50_ms": [
+   0.567,
+   0.377
+  ],
+  "reset_p99_ms": [
+   0.831,
+   0.569
+  ],
+  "reset_p99_ci_new": [
+   0.566,
+   0.572
+  ],
+  "reset_max_ms": [
+   5.22,
+   4.02
+  ],
+  "tail_adequate": true,
+  "baselines_new": {
+   "indexed-zstd3": {
+    "MiB": 2.384,
+    "reset_p99": 1.378
+   },
+   "perfile-zstd3": {
+    "MiB": 2.866,
+    "reset_p99": 0.021
+   },
+   "tar-zstd9": {
+    "MiB": 2.211,
+    "reset_p99": null
+   },
+   "zip-deflate": {
+    "MiB": 3.003,
+    "reset_p99": 0.083
+   }
+  },
+  "gate": "potential_regression",
+  "violations": [
+   {
+    "config": "vpak",
+    "metric": "pack",
+    "kind": "potential_timing_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 0,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 1,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 2,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 3,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 4,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 5,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 6,
+    "kind": "size_regression"
+   }
+  ],
+  "other_config_violations": 0,
+  "vpak_paired_pct": {
+   "pack": [
+    13.1,
+    5.1,
+    15.2
+   ],
+   "restore": [
+    -1.1,
+    -3.3,
+    5.1
+   ],
+   "latency": [
+    -31.6,
+    -32.3,
+    -30.6
+   ]
+  }
+ },
+ "kenney": {
+  "size_old": 4463709,
+  "size_new": 4481720,
+  "size_pct": 0.4,
+  "pack_ms": [
+   345.4,
+   183.0
+  ],
+  "restore_ms": [
+   7.11,
+   4.47
+  ],
+  "reset_p50_ms": [
+   0.126,
+   0.065
+  ],
+  "reset_p99_ms": [
+   5.957,
+   0.356
+  ],
+  "reset_p99_ci_new": [
+   0.349,
+   3.54
+  ],
+  "reset_max_ms": [
+   6.97,
+   8.74
+  ],
+  "tail_adequate": true,
+  "baselines_new": {
+   "indexed-zstd3": {
+    "MiB": 4.297,
+    "reset_p99": 1.3
+   },
+   "perfile-zstd3": {
+    "MiB": 4.34,
+    "reset_p99": 0.092
+   },
+   "tar-zstd9": {
+    "MiB": 4.285,
+    "reset_p99": null
+   },
+   "zip-deflate": {
+    "MiB": 4.34,
+    "reset_p99": 0.16
+   }
+  },
+  "gate": "potential_regression",
+  "violations": [
+   {
+    "config": "vpak",
+    "round": 0,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 1,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 2,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 3,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 4,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 5,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 6,
+    "kind": "size_regression"
+   }
+  ],
+  "other_config_violations": 0,
+  "vpak_paired_pct": {
+   "pack": [
+    -46.7,
+    -49.5,
+    -44.7
+   ],
+   "restore": [
+    -37.1,
+    -38.6,
+    -35.4
+   ],
+   "latency": [
+    -94.0,
+    -94.1,
+    -40.8
+   ]
+  }
+ },
+ "browserquest": {
+  "size_old": 2908990,
+  "size_new": 2935824,
+  "size_pct": 0.92,
+  "pack_ms": [
+   167.4,
+   181.6
+  ],
+  "restore_ms": [
+   17.42,
+   17.1
+  ],
+  "reset_p50_ms": [
+   0.436,
+   0.152
+  ],
+  "reset_p99_ms": [
+   1.446,
+   0.688
+  ],
+  "reset_p99_ci_new": [
+   0.682,
+   0.703
+  ],
+  "reset_max_ms": [
+   17.99,
+   17.91
+  ],
+  "tail_adequate": true,
+  "baselines_new": {
+   "indexed-zstd3": {
+    "MiB": 2.799,
+    "reset_p99": 1.645
+   },
+   "perfile-zstd3": {
+    "MiB": 2.99,
+    "reset_p99": 0.32
+   },
+   "tar-zstd9": {
+    "MiB": 2.671,
+    "reset_p99": null
+   },
+   "zip-deflate": {
+    "MiB": 3.137,
+    "reset_p99": 0.455
+   }
+  },
+  "gate": "potential_regression",
+  "violations": [
+   {
+    "config": "vpak",
+    "round": 0,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 1,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 2,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 3,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 4,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 5,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 6,
+    "kind": "size_regression"
+   }
+  ],
+  "other_config_violations": 0,
+  "vpak_paired_pct": {
+   "pack": [
+    5.0,
+    0.4,
+    12.3
+   ],
+   "restore": [
+    -2.7,
+    -3.6,
+    -0.7
+   ],
+   "latency": [
+    -52.4,
+    -53.0,
+    -51.5
+   ]
+  }
+ },
+ "silesia": {
+  "size_old": 60732783,
+  "size_new": 60758231,
+  "size_pct": 0.04,
+  "pack_ms": [
+   1923.2,
+   1587.8
+  ],
+  "restore_ms": [
+   122.38,
+   102.36
+  ],
+  "reset_p50_ms": [
+   31.125,
+   27.094
+  ],
+  "reset_p99_ms": [
+   133.639,
+   133.287
+  ],
+  "reset_p99_ci_new": [
+   132.331,
+   133.642
+  ],
+  "reset_max_ms": [
+   134.33,
+   133.85
+  ],
+  "tail_adequate": false,
+  "baselines_new": {
+   "indexed-zstd3": {
+    "MiB": 63.717,
+    "reset_p99": 66.266
+   },
+   "perfile-zstd3": {
+    "MiB": 63.074,
+    "reset_p99": 57.859
+   },
+   "tar-zstd9": {
+    "MiB": 56.442,
+    "reset_p99": null
+   },
+   "zip-deflate": {
+    "MiB": 65.655,
+    "reset_p99": 74.373
+   }
+  },
+  "gate": "potential_regression",
+  "violations": [
+   {
+    "config": "vpak",
+    "round": 0,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 1,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 2,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 3,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 4,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 5,
+    "kind": "size_regression"
+   },
+   {
+    "config": "vpak",
+    "round": 6,
+    "kind": "size_regression"
+   }
+  ],
+  "other_config_violations": 0,
+  "vpak_paired_pct": {
+   "pack": [
+    -17.4,
+    -17.8,
+    -11.5
+   ],
+   "restore": [
+    -16.5,
+    -18.3,
+    -13.9
+   ]
+  }
+ },
+ "kodak": {
+  "bc1-fast": {
+   "bpp": [
+    4.0,
+    4.0
+   ],
+   "rgb_psnr_srgb_db": [
+    34.619,
+    34.619
+   ],
+   "worst_image_rgb_psnr_db": [
+    31.009,
+    31.009
+   ],
+   "flip_image_mean": [
+    0.053,
+    0.053
+   ]
+  },
+  "bc1-max": {
+   "bpp": [
+    4.0,
+    4.0
+   ],
+   "rgb_psnr_srgb_db": [
+    35.231,
+    35.231
+   ],
+   "worst_image_rgb_psnr_db": [
+    31.373,
+    31.373
+   ],
+   "flip_image_mean": [
+    0.043,
+    0.043
+   ]
+  },
+  "bc1-max-rdo": {
+   "bpp": [
+    4.0,
+    4.0
+   ],
+   "rgb_psnr_srgb_db": [
+    35.249,
+    35.249
+   ],
+   "worst_image_rgb_psnr_db": [
+    31.381,
+    31.381
+   ],
+   "flip_image_mean": [
+    0.043,
+    0.043
+   ]
+  },
+  "bc7-mode6": {
+   "bpp": [
+    8.0,
+    8.0
+   ],
+   "rgb_psnr_srgb_db": [
+    41.961,
+    41.837
+   ],
+   "worst_image_rgb_psnr_db": [
+    38.467,
+    38.39
+   ],
+   "flip_image_mean": [
+    0.024,
+    0.025
+   ]
+  },
+  "bcx-storage": {
+   "bpp": [
+    4.668,
+    4.665
+   ],
+   "rgb_psnr_srgb_db": [
+    38.557,
+    38.522
+   ],
+   "worst_image_rgb_psnr_db": [
+    36.19,
+    36.157
+   ],
+   "flip_image_mean": [
+    0.036,
+    0.036
+   ]
+  }
+ },
+ "kodak_alpha_max_mse": {
+  "old": {
+   "bc7-mode6": 0.1893132527669271,
+   "bcx-storage": 0.10148874918619792
+  },
+  "new": {
+   "bc7-mode6": 0.0,
+   "bcx-storage": 0.0
+  }
+ }
+}

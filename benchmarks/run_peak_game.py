@@ -1,4 +1,7 @@
-"""
+"""Legacy exploratory runner, not a validated competitive scoreboard.
+See docs/BENCHMARKING.md for the canonical measurement protocol.
+
+
 Peak-game benchmark: pack a FULL open-source game directory with VortexPak
 and compare against general-purpose codecs on the identical byte corpus.
 

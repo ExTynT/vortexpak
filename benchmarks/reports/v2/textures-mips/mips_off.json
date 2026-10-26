@@ -1,0 +1,73 @@
+{
+ "implementation": "C:\\Users\\Ivan\\Documents\\antigravity\\mysterious-bose\\vortexpak\\__init__.py",
+ "results": {
+  "minetest": {
+   "35.0": {
+    "textures": 451,
+    "archive_bytes": 194735,
+    "pack_s": 0.2,
+    "modes": {
+     "lossless": 234,
+     "BC7": 55,
+     "BC1": 162
+    },
+    "gpu_pooled_rgb_psnr_db": 39.74,
+    "gpu_min_rgb_psnr_db": 35.03,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "kenney": {
+   "35.0": {
+    "textures": 8,
+    "archive_bytes": 853329,
+    "pack_s": 0.7,
+    "modes": {
+     "BC7": 2,
+     "BC1": 3,
+     "lossless": 3
+    },
+    "gpu_pooled_rgb_psnr_db": 42.94,
+    "gpu_min_rgb_psnr_db": 36.99,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "browserquest": {
+   "35.0": {
+    "textures": 238,
+    "archive_bytes": 1692686,
+    "pack_s": 2.1,
+    "modes": {
+     "lossless": 219,
+     "BC7": 15,
+     "BC1": 4
+    },
+    "gpu_pooled_rgb_psnr_db": 41.0,
+    "gpu_min_rgb_psnr_db": 36.12,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "xonotic": {
+   "35.0": {
+    "textures": 3118,
+    "archive_bytes": 152587600,
+    "pack_s": 23.5,
+    "modes": {
+     "lossless": 314,
+     "BC7": 1304,
+     "BC1": 1500
+    },
+    "gpu_pooled_rgb_psnr_db": 38.73,
+    "gpu_min_rgb_psnr_db": 35.0,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  }
+ }
+}

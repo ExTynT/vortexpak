@@ -1,0 +1,193 @@
+{
+ "implementation": "C:\\Users\\Ivan\\Documents\\antigravity\\mysterious-bose\\benchmarks\\reports\\v2\\build-9800x3d-v3\\snapshot\\vortexpak\\__init__.py",
+ "results": {
+  "minetest": {
+   "30.0": {
+    "textures": 451,
+    "archive_bytes": 183570,
+    "pack_s": 0.2,
+    "modes": {
+     "lossless": 155,
+     "BC7": 57,
+     "BC1": 239
+    },
+    "gpu_pooled_rgb_psnr_db": 35.8,
+    "gpu_min_rgb_psnr_db": 30.03,
+    "gpu_below_30": 0,
+    "gpu_below_35": 103,
+    "opaque_alpha_broken": 0
+   },
+   "32.0": {
+    "textures": 451,
+    "archive_bytes": 183838,
+    "pack_s": 0.2,
+    "modes": {
+     "lossless": 189,
+     "BC7": 52,
+     "BC1": 210
+    },
+    "gpu_pooled_rgb_psnr_db": 37.7,
+    "gpu_min_rgb_psnr_db": 32.01,
+    "gpu_below_30": 0,
+    "gpu_below_35": 61,
+    "opaque_alpha_broken": 0
+   },
+   "35.0": {
+    "textures": 451,
+    "archive_bytes": 194736,
+    "pack_s": 0.2,
+    "modes": {
+     "lossless": 234,
+     "BC7": 55,
+     "BC1": 162
+    },
+    "gpu_pooled_rgb_psnr_db": 39.74,
+    "gpu_min_rgb_psnr_db": 35.03,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "kenney": {
+   "30.0": {
+    "textures": 8,
+    "archive_bytes": 850571,
+    "pack_s": 0.8,
+    "modes": {
+     "BC1": 4,
+     "lossless": 3,
+     "BC7": 1
+    },
+    "gpu_pooled_rgb_psnr_db": 42.64,
+    "gpu_min_rgb_psnr_db": 31.42,
+    "gpu_below_30": 0,
+    "gpu_below_35": 1,
+    "opaque_alpha_broken": 0
+   },
+   "32.0": {
+    "textures": 8,
+    "archive_bytes": 853336,
+    "pack_s": 0.8,
+    "modes": {
+     "BC7": 2,
+     "BC1": 3,
+     "lossless": 3
+    },
+    "gpu_pooled_rgb_psnr_db": 42.94,
+    "gpu_min_rgb_psnr_db": 36.99,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   },
+   "35.0": {
+    "textures": 8,
+    "archive_bytes": 853336,
+    "pack_s": 0.8,
+    "modes": {
+     "BC7": 2,
+     "BC1": 3,
+     "lossless": 3
+    },
+    "gpu_pooled_rgb_psnr_db": 42.94,
+    "gpu_min_rgb_psnr_db": 36.99,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "browserquest": {
+   "30.0": {
+    "textures": 238,
+    "archive_bytes": 2108003,
+    "pack_s": 3.7,
+    "modes": {
+     "lossless": 181,
+     "BC7": 51,
+     "BC1": 6
+    },
+    "gpu_pooled_rgb_psnr_db": 37.96,
+    "gpu_min_rgb_psnr_db": 30.27,
+    "gpu_below_30": 0,
+    "gpu_below_35": 11,
+    "opaque_alpha_broken": 0
+   },
+   "32.0": {
+    "textures": 238,
+    "archive_bytes": 2049156,
+    "pack_s": 3.8,
+    "modes": {
+     "lossless": 198,
+     "BC7": 34,
+     "BC1": 6
+    },
+    "gpu_pooled_rgb_psnr_db": 38.51,
+    "gpu_min_rgb_psnr_db": 33.3,
+    "gpu_below_30": 0,
+    "gpu_below_35": 3,
+    "opaque_alpha_broken": 0
+   },
+   "35.0": {
+    "textures": 238,
+    "archive_bytes": 1692676,
+    "pack_s": 3.9,
+    "modes": {
+     "lossless": 219,
+     "BC7": 15,
+     "BC1": 4
+    },
+    "gpu_pooled_rgb_psnr_db": 41.0,
+    "gpu_min_rgb_psnr_db": 36.12,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  },
+  "xonotic": {
+   "30.0": {
+    "textures": 3118,
+    "archive_bytes": 119360688,
+    "pack_s": 36.3,
+    "modes": {
+     "lossless": 162,
+     "BC7": 231,
+     "BC1": 2725
+    },
+    "gpu_pooled_rgb_psnr_db": 36.59,
+    "gpu_min_rgb_psnr_db": 30.01,
+    "gpu_below_30": 0,
+    "gpu_below_35": 1307,
+    "opaque_alpha_broken": 0
+   },
+   "32.0": {
+    "textures": 3118,
+    "archive_bytes": 132873130,
+    "pack_s": 37.6,
+    "modes": {
+     "lossless": 230,
+     "BC7": 414,
+     "BC1": 2474
+    },
+    "gpu_pooled_rgb_psnr_db": 37.19,
+    "gpu_min_rgb_psnr_db": 32.01,
+    "gpu_below_30": 0,
+    "gpu_below_35": 1045,
+    "opaque_alpha_broken": 0
+   },
+   "35.0": {
+    "textures": 3118,
+    "archive_bytes": 152587399,
+    "pack_s": 41.6,
+    "modes": {
+     "lossless": 314,
+     "BC7": 1304,
+     "BC1": 1500
+    },
+    "gpu_pooled_rgb_psnr_db": 38.73,
+    "gpu_min_rgb_psnr_db": 35.0,
+    "gpu_below_30": 0,
+    "gpu_below_35": 0,
+    "opaque_alpha_broken": 0
+   }
+  }
+ }
+}

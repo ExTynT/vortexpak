@@ -1,0 +1,325 @@
+{
+ "host": "AMD64 Family 26 Model 68 Stepping 0, AuthenticAMD",
+ "release": {
+  "pk3_files": {
+   "font-unifont-20230620.pk3": 2839911,
+   "font-xolonium-20230620.pk3": 171388,
+   "xonotic-20230620-data.pk3": 317540306,
+   "xonotic-20230620-maps.pk3": 626168138,
+   "xonotic-20230620-music.pk3": 110697275,
+   "xonotic-20230620-nexcompat.pk3": 125433473,
+   "xonotic-20230620-xoncompat.pk3": 2308299
+  },
+  "download_bytes": 1185158790,
+  "entries": 14597,
+  "by_type": {
+   ".dds": {
+    "files": 8186,
+    "raw_bytes": 1630014253,
+    "pk3_bytes": 730296340
+   },
+   ".jpg": {
+    "files": 3585,
+    "raw_bytes": 182545848,
+    "pk3_bytes": 172627721
+   },
+   ".ogg": {
+    "files": 846,
+    "raw_bytes": 147886466,
+    "pk3_bytes": 145986589
+   },
+   ".bsp": {
+    "files": 31,
+    "raw_bytes": 201365164,
+    "pk3_bytes": 53570820
+   },
+   ".dpm": {
+    "files": 40,
+    "raw_bytes": 48801856,
+    "pk3_bytes": 20845155
+   },
+   ".iqm": {
+    "files": 137,
+    "raw_bytes": 31205921,
+    "pk3_bytes": 16229736
+   },
+   ".md3": {
+    "files": 294,
+    "raw_bytes": 52700240,
+    "pk3_bytes": 13668278
+   },
+   ".map": {
+    "files": 150,
+    "raw_bytes": 68198881,
+    "pk3_bytes": 6917145
+   },
+   ".dem": {
+    "files": 2,
+    "raw_bytes": 15341273,
+    "pk3_bytes": 5434803
+   },
+   ".mp3": {
+    "files": 2,
+    "raw_bytes": 3443693,
+    "pk3_bytes": 3391628
+   },
+   ".ttf": {
+    "files": 1,
+    "raw_bytes": 12303504,
+    "pk3_bytes": 2839434
+   },
+   ".ase": {
+    "files": 183,
+    "raw_bytes": 32412908,
+    "pk3_bytes": 2681464
+   },
+   ".po": {
+    "files": 53,
+    "raw_bytes": 14240937,
+    "pk3_bytes": 2452616
+   },
+   ".dat": {
+    "files": 3,
+    "raw_bytes": 12441606,
+    "pk3_bytes": 2310702
+   },
+   ".lno": {
+    "files": 3,
+    "raw_bytes": 8261776,
+    "pk3_bytes": 973710
+   },
+   ".xcf": {
+    "files": 1,
+    "raw_bytes": 1092987,
+    "pk3_bytes": 533684
+   },
+   ".obj": {
+    "files": 38,
+    "raw_bytes": 1043665,
+    "pk3_bytes": 242050
+   },
+   ".cfg": {
+    "files": 117,
+    "raw_bytes": 907856,
+    "pk3_bytes": 182532
+   },
+   ".zym": {
+    "files": 2,
+    "raw_bytes": 915198,
+    "pk3_bytes": 181509
+   },
+   ".otf": {
+    "files": 2,
+    "raw_bytes": 437724,
+    "pk3_bytes": 169656
+   },
+   ".cache": {
+    "files": 32,
+    "raw_bytes": 1535461,
+    "pk3_bytes": 147412
+   },
+   ".sp2": {
+    "files": 31,
+    "raw_bytes": 2164672,
+    "pk3_bytes": 123859
+   },
+   ".shader": {
+    "files": 186,
+    "raw_bytes": 706092,
+    "pk3_bytes": 76991
+   },
+   ".mdl": {
+    "files": 19,
+    "raw_bytes": 367044,
+    "pk3_bytes": 53511
+   },
+   ".txt": {
+    "files": 66,
+    "raw_bytes": 277637,
+    "pk3_bytes": 50965
+   },
+   ".waypoints": {
+    "files": 32,
+    "raw_bytes": 164205,
+    "pk3_bytes": 37997
+   },
+   ".ent": {
+    "files": 1,
+    "raw_bytes": 236551,
+    "pk3_bytes": 36663
+   },
+   ".pot": {
+    "files": 1,
+    "raw_bytes": 239685,
+    "pk3_bytes": 34547
+   },
+   ".sh": {
+    "files": 31,
+    "raw_bytes": 98907,
+    "pk3_bytes": 20927
+   },
+   ".framegroups": {
+    "files": 88,
+    "raw_bytes": 53236,
+    "pk3_bytes": 17775
+   },
+   ".wav": {
+    "files": 3,
+    "raw_bytes": 70220,
+    "pk3_bytes": 17721
+   },
+   ".license": {
+    "files": 1,
+    "raw_bytes": 35149,
+    "pk3_bytes": 11547
+   },
+   ".pl": {
+    "files": 7,
+    "raw_bytes": 27977,
+    "pk3_bytes": 10666
+   },
+   ".skin": {
+    "files": 268,
+    "raw_bytes": 12105,
+    "pk3_bytes": 8832
+   },
+   ".sounds": {
+    "files": 22,
+    "raw_bytes": 30826,
+    "pk3_bytes": 6933
+   },
+   ".spr32": {
+    "files": 11,
+    "raw_bytes": 12904,
+    "pk3_bytes": 6550
+   },
+   ".mapinfo": {
+    "files": 30,
+    "raw_bytes": 8044,
+    "pk3_bytes": 4704
+   },
+   ".hardwired": {
+    "files": 32,
+    "raw_bytes": 9778,
+    "pk3_bytes": 4638
+   },
+   ".zh_tw": {
+    "files": 1,
+    "raw_bytes": 7761,
+    "pk3_bytes": 3791
+   },
+   ".zh_hk": {
+    "files": 1,
+    "raw_bytes": 7761,
+    "pk3_bytes": 3786
+   },
+   ".zh_cn": {
+    "files": 1,
+    "raw_bytes": 7761,
+    "pk3_bytes": 3782
+   },
+   ".bgs": {
+    "files": 1,
+    "raw_bytes": 16359,
+    "pk3_bytes": 3435
+   },
+   "(none)": {
+    "files": 5,
+    "raw_bytes": 7064,
+    "pk3_bytes": 2477
+   },
+   ".options": {
+    "files": 30,
+    "raw_bytes": 2543,
+    "pk3_bytes": 2230
+   },
+   ".xpm": {
+    "files": 1,
+    "raw_bytes": 2589,
+    "pk3_bytes": 1131
+   },
+   ".svg": {
+    "files": 1,
+    "raw_bytes": 2804,
+    "pk3_bytes": 1085
+   },
+   ".rb": {
+    "files": 1,
+    "raw_bytes": 2381,
+    "pk3_bytes": 818
+   },
+   ".spr": {
+    "files": 2,
+    "raw_bytes": 2172,
+    "pk3_bytes": 676
+   },
+   ".rtlights": {
+    "files": 6,
+    "raw_bytes": 2789,
+    "pk3_bytes": 614
+   },
+   ".subr": {
+    "files": 1,
+    "raw_bytes": 2284,
+    "pk3_bytes": 554
+   },
+   ".width": {
+    "files": 2,
+    "raw_bytes": 4686,
+    "pk3_bytes": 480
+   },
+   ".cmake": {
+    "files": 3,
+    "raw_bytes": 838,
+    "pk3_bytes": 463
+   },
+   ".mid": {
+    "files": 1,
+    "raw_bytes": 359,
+    "pk3_bytes": 242
+   },
+   ".rc": {
+    "files": 1,
+    "raw_bytes": 346,
+    "pk3_bytes": 192
+   },
+   ".in": {
+    "files": 1,
+    "raw_bytes": 280,
+    "pk3_bytes": 137
+   },
+   ".lmp": {
+    "files": 1,
+    "raw_bytes": 192,
+    "pk3_bytes": 37
+   }
+  }
+ },
+ "assets_files": 14597,
+ "assets_bytes": 2471683218,
+ "dds": {
+  "files": 8186,
+  "raw_bytes": 1630014253,
+  "fourcc_bytes": {
+   "DXT1": 982365008,
+   "DXT5": 620971488,
+   "DXT3": 21051312,
+   "DXT2": 5592560,
+   "other": 33885
+  },
+  "solid_zstd19_bytes": 639629782,
+  "solid_zstd19_s": 31.5
+ },
+ "vpak_strict": {
+  "stream": {
+   "bytes": 1114534253,
+   "pack_s": 18.0,
+   "byte_exact_files": 14597
+  },
+  "compact": {
+   "bytes": 1077614888,
+   "pack_s": 250.2,
+   "byte_exact_files": 14597
+  }
+ }
+}

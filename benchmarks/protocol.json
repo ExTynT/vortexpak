@@ -1,0 +1,191 @@
+{
+  "schema": 2,
+  "version": "2.0.0",
+  "seed": 20261025,
+  "profiles": {
+    "reference": {
+      "threads": 1,
+      "repeats": 7,
+      "warmups": 1,
+      "requests_assets": 10000,
+      "requests_silesia": 100
+    },
+    "diagnostic": {
+      "reference": false
+    },
+    "physical8": {
+      "threads": 8,
+      "repeats": 7,
+      "warmups": 1,
+      "requests_assets": 10000,
+      "requests_silesia": 100
+    }
+  },
+  "archive_configs": [
+    "vpak",
+    "tar-zstd3",
+    "tar-zstd9",
+    "tar-zstd19",
+    "tar-lz4",
+    "zip-store",
+    "zip-deflate",
+    "indexed-zstd3",
+    "perfile-zstd3"
+  ],
+  "quality_configs": {
+    "bc1-fast": {
+      "fmt": 1,
+      "quality": "fast",
+      "rdo": 0
+    },
+    "bc1-max": {
+      "fmt": 1,
+      "quality": "max",
+      "rdo": 0
+    },
+    "bc1-max-rdo": {
+      "fmt": 1,
+      "quality": "max",
+      "rdo": 1
+    },
+    "bc7-mode6": {
+      "fmt": 7,
+      "quality": "max",
+      "rdo": 0
+    },
+    "bcx-storage": {
+      "fmt": 11,
+      "quality": "max",
+      "rdo": 0
+    }
+  },
+  "corpora": {
+    "minetest": {
+      "files": 1434,
+      "bytes": 5342715,
+      "sha256": "e1cdb3af9b6381a39f2978ac6c2aadfa8a89e89aeaee4897c4ba56041934d31b"
+    },
+    "kenney": {
+      "files": 100,
+      "bytes": 5208758,
+      "sha256": "51fb7d8968929cab11f6fad797dc18df9fa9ed056e1a9bc3aa3dd543effcf08d"
+    },
+    "browserquest": {
+      "files": 452,
+      "bytes": 72381221,
+      "sha256": "0702a565fe85fa16f374c531dd14386099a2e669099d74357f7c112a72e60641"
+    },
+    "silesia": {
+      "files": 12,
+      "bytes": 211938580,
+      "sha256": "319dd01d676ca8828d5ae5a15b236bca5d7ec4d55b8b9e3c7f6eec2aa3fe55ca"
+    },
+    "kodak": {
+      "files": 24,
+      "bytes": 15394305,
+      "sha256": "08eb9dcaaceb1e88e4c177aee3b7cc41b84e358c839fae2c4091dd03d7df849f"
+    }
+  },
+  "contracts": {
+    "archive": "original relative paths and every original byte; metadata/empty directories excluded",
+    "inputs": "whole directory, .git excluded explicitly, symlinks rejected; immutable SHA-256 manifest",
+    "pack": "preloaded original byte inputs -> complete serialized archive; pool setup/teardown included",
+    "restore": "complete serialized archive -> parsed, decoded, owned original bytes",
+    "latency": "separate codec_reset and repeat_after_one_prime loops; reset before every query; explicit prime before repeat",
+    "os_cache": "uncontrolled; no cold physical IO claim",
+    "cache": "VPK and indexed controls:16 blocks; ZIP:no decoded member cache; not equal-byte caches",
+    "timing": "integer monotonic nanoseconds; no observer subtraction; no sampler threads in measured region",
+    "integrity": "every full restore SHA-256; every read exact original bytes or SHA-256 control path; no skipped validation",
+    "quality": "RGB-only sRGB pooled MSE/PSNR; alpha separate; linear RGB MSE; Pillow DDS reference; FLIP RGB LDR ppd=67",
+    "pixels": "Pillow convert RGBA; no resize, EXIF transpose or ICC transform; input color interpretation sRGB for Kodak only",
+    "statistics": "rounds are replication units; nearest-rank within-round quantiles; bootstrap medians across rounds; descriptive only",
+    "tail": "expected tail count is coverage diagnostic, not precision guarantee or production SLO",
+    "selection": "all registered cases; predetermined randomized order; retain all outliers and failed attempts; no adaptive stopping",
+    "resource": "same CPU affinity allowance; no global power/cache changes; sequential measured workers"
+  },
+  "limits": {
+    "independent_hardware": false,
+    "real_gpu": false,
+    "physical_cold_io": false,
+    "alpha_compositing": false,
+    "normal_map_angular_error": false
+  },
+  "archive_options": {
+    "vpak": {
+      "mode": "strict",
+      "rdo": false,
+      "gpu": "none",
+      "entropy_backend": "vxlz",
+      "max_workers": "CPU budget"
+    },
+    "tar-zstd3": {
+      "container": "deterministic PAX tar",
+      "level": 3,
+      "checksum": true
+    },
+    "tar-zstd9": {
+      "container": "deterministic PAX tar",
+      "level": 9,
+      "checksum": true
+    },
+    "tar-zstd19": {
+      "container": "deterministic PAX tar",
+      "level": 19,
+      "checksum": true
+    },
+    "tar-lz4": {
+      "container": "deterministic PAX tar",
+      "level": 0,
+      "checksum": true
+    },
+    "zip-store": {
+      "container": "ZIP",
+      "method": "STORED",
+      "timestamps": "1980-01-01"
+    },
+    "zip-deflate": {
+      "container": "ZIP",
+      "method": "DEFLATED",
+      "level": 6
+    },
+    "indexed-zstd3": {
+      "level": 3,
+      "block_bytes": 2097152,
+      "cache_blocks": 16,
+      "checksum": true
+    },
+    "perfile-zstd3": {
+      "level": 3,
+      "block_policy": "nonempty file",
+      "cache_blocks": 16,
+      "checksum": true
+    }
+  },
+  "cache_sequence": {
+    "codec_reset": [
+      "clear",
+      "read",
+      "verify"
+    ],
+    "repeat_after_one_prime": [
+      "clear",
+      "prime",
+      "read",
+      "verify_prime_and_read"
+    ]
+  },
+  "regression": {
+    "timing_tolerance_percent": 5,
+    "quality_tolerance": 0,
+    "size_tolerance_bytes": 0,
+    "minimum_rounds": 7,
+    "interpretation": "descriptive paired-round operational gate; multiple comparisons not population significance; ambiguous CI is inconclusive",
+    "primary_metrics": [
+      "pack.wall_ns",
+      "restore.wall_ns",
+      "latency.codec_reset.p99"
+    ],
+    "cross_protocol_comparisons": "forbidden",
+    "harness_equivalence": "functional only; never attribute harness timing changes to codecs"
+  }
+}
