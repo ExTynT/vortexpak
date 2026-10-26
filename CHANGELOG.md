@@ -6,6 +6,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.1] - 2026-10-26
+
+### Changed
+- README rewritten around what a user needs: result, install, usage, modes and
+  layouts, how it works, benchmarks, roadmap, development.
+- Download-form speed policy: decoders must keep pace with a 134.75 Mbit/s download
+  (global median fixed broadband, Ookla, September 2026) on 8 threads, replacing the
+  644.66 Mbit/s bar.
+- Roadmap: M22 (lossless JPEG recompression) done with VXJ; M25 (context-mixing
+  download coder) planned; North Star gates updated from the v3.4.0 measurement.
+
 ## [3.4.0] - 2026-10-26
 
 ### Added

@@ -1,72 +1,108 @@
 # VortexPak
 
-**Format-aware game asset archiver, GPU texture codec and seekable VFS — Rust core, Python/C-ABI interface.**
+Archive format and toolkit for game assets: byte-exact or GPU-ready packing, a
+seekable virtual file system, and a Rust core with Python, CLI and C interfaces.
 
 [![CI](https://github.com/ExTynT/vortexpak/actions/workflows/ci.yml/badge.svg)](https://github.com/ExTynT/vortexpak/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Packs game assets into a seekable archive. Strict mode preserves original file bytes; engine mode can store lossy GPU-native BC1/BC7 textures. Storage-only BCX requires load-time decoding. Performance and quality claims require the separate, reproducible benchmark tracks below.
+## Result
 
-## Quick start
+The complete Xonotic 0.8.6 release (14,597 files), packed byte-exact: every file
+restores with an identical SHA-256.
+
+| Archive | Size | vs. shipped download |
+|---|---:|---:|
+| Shipped download: 7 pk3 files (ZIP/DEFLATE) | 1,185.2 MB | 1.000× |
+| **VortexPak** `--mode strict --layout compact` | **904.9 MB** | **0.764×** |
+| xz -9e, single thread, one solid stream | 951.2 MB | 0.803× |
+| zstd --ultra -22 --long=31, single thread, one solid stream | 1,014.1 MB | 0.856× |
+
+The xz and zstd streams carry no file index and must decode everything before a
+file to read it; VortexPak reads any file on its own. At the 134.75 Mbit/s global
+median broadband speed the archive downloads in 53.7 s instead of 70.4 s for the
+pk3 files; extracting it takes another 13.6 s on 16 threads. Method, timings and
+caveats: [RESULTS.md](benchmarks/reports/v2/xonotic-lossless-v3.4/RESULTS.md).
+
+## Install
 
 ```powershell
-pip install .          # builds the Rust core via cargo
-vortexpak pack ./game game.vpak --gpu auto
-vortexpak info game.vpak
-vortexpak extract game.vpak textures/hero.png -o hero.png
+pip install .    # needs Python >= 3.10 and a Rust toolchain (cargo builds the native core)
+```
+
+With `VORTEXPAK_DISABLE_NATIVE=1` a pure Python/NumPy fallback is used instead of
+the native core. Archives written with the native core may contain VXCM or VXJ
+blocks, which need it to decode.
+
+## Usage
+
+```powershell
+vortexpak pack ./game game.vpak --mode strict                   # byte-exact, fast single-file reads
+vortexpak pack ./game game.vpak --mode strict --layout compact  # byte-exact, smallest download
+vortexpak pack ./game game.vpak --gpu auto                      # engine mode: GPU-ready textures
+vortexpak ls game.vpak --filter "maps/*"
+vortexpak info game.vpak                                        # integrity check (XXH3-64)
+vortexpak extract game.vpak maps/arena.bsp -o arena.bsp
+vortexpak extract game.vpak textures/wall.png --dds -o wall.dds  # GPU texture as DDS
 ```
 
 ```python
+from pathlib import Path
 from vortexpak import VortexPakCodec, VortexVFS
 
-arch = VortexPakCodec(mode="engine", gpu="auto").encode_directory("game/")
-open("game.vpak", "wb").write(arch.to_bytes())
+archive = VortexPakCodec(mode="strict", layout="compact").encode_directory(Path("game"))
+Path("game.vpak").write_bytes(archive.to_bytes())
 
 with VortexVFS.open("game.vpak") as vfs:
-    blocks = vfs.read_bytes("textures/hero.png", materialize_full_rgba=False)
+    data = vfs.read_bytes("maps/arena.bsp")
 ```
 
-## Benchmarks
+Engines without Python use the C ABI in `vortexpak_native/vortexpak.h`; see
+[examples/c/consumer.c](examples/c/consumer.c) and
+[examples/engine_loader](examples/engine_loader/engine_loader.c).
 
-Competitive comparisons use the [versioned v2 protocol](docs/BENCHMARKING.md) and
-`benchmarks/protocol.json`. The source of truth is a validated immutable evidence
-bundle, not its PNG/HTML rendering. Historical v1 reports remain unchanged.
-Lossless archives and lossy texture quality are separate tracks. No solid archive
-is compared only against per-file compression; no opaque alpha inflates RGB PSNR.
+## Modes and layouts
 
-~~~powershell
-pip install -e ".[benchmark,quality]"
-python benchmarks/protocol.py build --output ./benchmark-build
-python benchmarks/run_reference.py --corpus-root ../vortex_corpus --output ./benchmark-v2 --receipt ./benchmark-build/receipt.json
-~~~
-
-The archive matrix includes VortexPak strict, solid tar+zstd (3/9/19), solid
-LZ4, ZIP stored/DEFLATE, indexed 2 MiB zstd and per-file zstd. Every original
-file must restore byte-for-byte (SHA-256), on every measured trial.
-
-Reports retain randomized repeated trials, CPU budgets, wall/CPU time, throughput,
-sampled RSS, raw latency distributions, deadline misses, size buckets, bootstrap
-intervals, environment and input/source hashes. Codec-cache reset is **not cold
-OS/disk IO**. The runners reject incomplete or changing inputs rather than
-silently sampling. There is no aggregate winner score.
-
-[Graphical measured report](benchmarks/reports/index.html) and [raw experiment folders](benchmarks/reports/) cover only their named complete corpora,
-not all games or hardware. Historical charts/results from the older runners use
-a different, exploratory protocol and are not a validated competitive scoreboard.
-
-The legacy capability matrix (`benchmarks/quality_matrix.py`) describes features, not a measured head-to-head comparison with Oodle/Basis/NVTT.
+| Option | Use it for | Guarantee |
+|---|---|---|
+| `--mode strict` | distribution, archival | every file byte-exact; `--rdo` and `--gpu` are rejected |
+| `--mode engine` (default) | engine-ready textures | images become pixel data or, with `--gpu`, GPU blocks (BC1/BC4/BC5/BC7, full mip chain, sRGB tag); `--gpu auto` keeps a texture lossless when no format reaches `--gpu-min-psnr` (default 35 dB); other files byte-exact |
+| `--layout stream` (default) | games reading from the archive | assets of 64 KiB or more get their own blocks, smaller ones share ~256 KiB blocks, so a read never decodes unrelated data |
+| `--layout compact` | the smallest download | 16 MiB blocks, the VXCM coder and VXJ for JPEG (native core); extract once at install, since a cold single-file read decodes a whole block (p99 357 ms on Xonotic) |
 
 ## How it works
 
-1. **Format-aware lane packing** — assets are routed to semantic lanes (textures, structured data, scripts, media, 3D) sorted to maximize cross-file matches, then compressed with the proprietary **VXLZ-ANS** codec (Rust, Rayon-parallel) or zstd.
-2. **Lane dictionaries** — repetitive text lanes get a dictionary trained on their own content ([format spec](docs/FORMAT.md) strategies 9/10); blocks are re-emitted as dictionary-seeded zstd frames only when measurably smaller. Random access preserved.
-3. **VXTX-GPU block compression** — PNG/TGA/JPG → BC1 / BC4 / BC5 / BC7 (mode 6), bit-exact to the D3D11/Vulkan spec (checked against a reference decoder in CI). BC1 fit: multi-axis seeding, least-squares endpoint refinement (Giesen 2017), greedy 565 polish, AVX2 evaluation; closed-loop RDO optimizes post-codec error. `--gpu auto` takes the cheapest GPU-native format (BC1, then BC7) whose color PSNR (RGB, alpha excluded) and alpha PSNR reach `--gpu-min-psnr` (default 35 dB); opaque textures must stay exactly opaque. Below the floor the texture is stored losslessly instead — auto never ships a texture under it. Explicit `--gpu bc1|bc5|bc7|bcx` always uses that format. GPU-native textures carry a full mip chain (sRGB-correct box filter; `--no-mips` for UI/pixel art) and an sRGB/linear tag, so they upload as-is; `vortexpak extract --dds` writes any of them as a standard DDS. Opt-in BCX mixes BC1/BC7 per block for disk size (decoded at load).
-4. **Seekable VFS** — 16-block LRU cache, per-block decompression, XXH3-64 integrity on every asset. Decoder rejects tested corrupt inputs (adversarial tests); this is not a proof against all malformed archives.
-5. **C-ABI** — `vortexpak_native/vortexpak.h` (cbindgen-generated, CI-verified) exposes transforms, parallel decoders, BCn codecs and a native VFS for engines without Python ([examples/c/consumer.c](examples/c/consumer.c)).
+- **Blocks and index.** Files are grouped by type, ordered so similar data sits
+  together and packed into independently compressed blocks. An index maps every
+  file to its block, offset and XXH3-64 checksum. Exact duplicates are stored once.
+- **Own coders, written in Rust.** VXLZ-ANS for the stream layout; VXCM, an LZ
+  coder with context-modelled binary range coding, for the compact layout.
+- **Reversible transforms.** DXT textures are split into colour, index and alpha
+  streams (`VXD1`). JPEGs are re-coded at the DCT-coefficient level and rebuilt
+  bit-exact (`VXJ1`, compact layout only).
+- **GPU textures.** BC1/BC4/BC5/BC7 encoders whose blocks decode bit-exactly with
+  an independent reference decoder (checked in CI).
+- **Readers.** A seekable VFS in Python and Rust with a block cache, and a C ABI
+  generated by cbindgen and checked in CI.
 
-**Lossless contract.** `--mode strict` restores every original byte; it rejects `--rdo` and `--gpu`, which are lossy and require `--mode engine`.
+The container is specified in [docs/FORMAT.md](docs/FORMAT.md).
 
-**Block layout.** The default `--layout stream` gives every asset of 64 KiB or more its own block(s) and packs smaller assets into ~256 KiB blocks, so one random read never decodes unrelated bulk. `--layout compact` keeps larger shared blocks for more cross-asset context and a slightly smaller archive. Both decode with the same reader.
+## Benchmarks
+
+```powershell
+# the published Xonotic result: SHA-256 of every file, strongest single-thread xz and zstd
+python benchmarks/xonotic_lossless.py --release <dir with the pk3 files> --assets <extracted pk3 contents> --output <dir>
+
+# development iteration from a block cache; never used for published numbers
+python benchmarks/xon_iter.py exact
+python benchmarks/xon_iter.py quick
+```
+
+Download-form coders must decode at least as fast as a 134.75 Mbit/s download (the
+global median fixed-broadband speed, Ookla, September 2026) on 8 threads, so a
+smaller archive never makes installing slower than downloading. The multi-corpus
+protocol and its impartiality rules are in [docs/BENCHMARKING.md](docs/BENCHMARKING.md).
+Corpora are not part of the repository.
 
 ## Roadmap
 
@@ -78,16 +114,16 @@ The legacy capability matrix (`benchmarks/quality_matrix.py`) describes features
 
 | Gate | Target | Today |
 |---|---|---|
-| **Size** | ≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download) | 904.9 MB byte-exact (0.763×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB. |
+| **Size** | ≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download) | 904.9 MB byte-exact (0.764×, compact layout), all 14,597 files SHA-256 verified; 4.9 % smaller than xz -9e (951.2 MB). 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB. |
 | **Exact** | Every non-texture file byte-identical (SHA-256); JPEG recompression bit-exact | Strict mode verified byte-exact on all 14,597 files |
 | **Texture quality** | Every re-encoded DXT texture ≥ 40 dB RGB and alpha against the shipped texture, on every mip level | Shipped .dds (DXT1 982 MB, DXT5 621 MB raw) are opaque data; no DDS ingest, no BC3 (DXT5) encoder, no RDO for existing blocks |
 | **Real game** | Stock Xonotic 0.8.6 runs from the .vpak through a DarkPlaces filesystem backend on a real GPU: every official map loads, a recorded demo plays to the end, zero missing assets | No engine backend; never run on a GPU |
-| **Load speed** | No map loads slower than from the shipped pk3 files (median of 7 runs); single-asset read p99 ≤ 1 ms | Not measured; VXLZ decodes 2.4–4.6× slower than zstd on the same blocks VXJ (JPEG) is download-form only; its install decode keeps pace with a 644.66 Mbit/s download. |
-| **Iteration** | Changing one texture rebuilds the archive in ≤ 5 s on 8 cores; the resulting patch is ≤ 2× that asset’s compressed size | Full repack only: 18.0 s (stream) / 250.2 s (compact) on 16 workers; patch size not measured |
+| **Load speed** | No map loads slower than from the shipped pk3 files (median of 7 runs); single-asset read p99 ≤ 1 ms | Not measured in the engine yet. Download form at the 134.75 Mbit/s global median: 53.7 s download + 13.6 s extraction (16 threads) versus 70.4 s for the pk3 files; compact cold single-file read p99 357 ms. The game form (stream layout) never uses the download-only coders. |
+| **Iteration** | Changing one texture rebuilds the archive in ≤ 5 s on 8 cores; the resulting patch is ≤ 2× that asset’s compressed size | Full repack only: 298 s for the compact download form on 16 workers; patch size not measured |
 
 Every gate must hold at once, in one reproducible run. [Baseline evidence](benchmarks/reports/v2/north-star/BASELINE.md)
 
-**Progress:** 9 of 24 milestones done (38 %) `████████░░░░░░░░░░░░`
+**Progress:** 10 of 25 milestones done (40 %) `████████░░░░░░░░░░░░`
 
 ```mermaid
 flowchart LR
@@ -109,6 +145,7 @@ flowchart LR
     M7["✅ M7 · Stream block layout"]:::done
     M23["✅ M23 · Lossless Xonotic 0.80×"]:::done
     M24["🔜 M24 · Seekable compact archive"]:::next
+    M25["⬜ M25 · Context-mixing download coder"]:::planned
   end
   subgraph P3["3 · Engine-ready textures"]
     direction TB
@@ -128,7 +165,7 @@ flowchart LR
   end
   subgraph P5["5 · Production pipeline"]
     direction TB
-    M22["⬜ M22 · Lossless JPEG recompression"]:::planned
+    M22["✅ M22 · Lossless JPEG recompression"]:::done
     M16["⬜ M16 · Incremental repack"]:::planned
     M17["⬜ M17 · Patch-friendly archives"]:::planned
     M18["⬜ M18 · Faster VXLZ decode"]:::planned
@@ -150,13 +187,14 @@ flowchart LR
 </details>
 
 <details open>
-<summary><b>Phase 2 · Quality and streaming guarantees</b> · 4/5 🚧</summary>
+<summary><b>Phase 2 · Quality and streaming guarantees</b> · 4/6 🚧</summary>
 
 - [x] **M5 · Byte-exact strict mode** — `--mode strict` restores every byte and rejects the lossy `--rdo` and `--gpu` options. *(2026-10-26)* · [evidence](tests/test_bcn.py)
 - [x] **M6 · Texture quality floor** — `--gpu auto` never ships a texture below the floor (default 35 dB RGB) or with altered opaque alpha. *(2026-10-26)* · [evidence](benchmarks/reports/v2/ab-physical8/RESULTS.md)
 - [x] **M7 · Stream block layout** — Large assets get their own blocks: Kenney single-asset p99 5.96 → 0.36 ms for +0.4 % size. *(2026-10-26)* · [evidence](benchmarks/reports/v2/ab-physical8/RESULTS.md)
 - [x] **M23 · Lossless Xonotic 0.80×** — Byte-exact strict archive of all 14,597 Xonotic 0.8.6 files at ≤ 0.80× the shipped download (948.1 MB): 924.6 MB. *(2026-10-26)* · [evidence](benchmarks/reports/v2/xonotic-lossless/RESULTS.md)
-- [ ] **M24 · Seekable compact archive** — Keep ≤ 0.80× on Xonotic while a cold single-asset read stays ≤ 5 ms p99 (compact today: 373 ms). 🔜 *next*
+- [ ] **M24 · Seekable compact archive** — Keep ≤ 0.80× on Xonotic while a cold single-asset read stays ≤ 5 ms p99 (compact today: 357 ms). 🔜 *next*
+- [ ] **M25 · Context-mixing download coder** — Own context-mixing coder for the download form, admitted only while extraction stays within the download time at 134.75 Mbit/s; paq8px v217 measures a 15 % ceiling over VXCM on Xonotic slices. ⬜ *planned*
 
 </details>
 
@@ -182,10 +220,10 @@ flowchart LR
 
 </details>
 
-<details>
-<summary><b>Phase 5 · Production pipeline</b> · 0/5</summary>
+<details open>
+<summary><b>Phase 5 · Production pipeline</b> · 1/5 🚧</summary>
 
-- [ ] **M22 · Lossless JPEG recompression** — Bit-exact recompression of the 173 MB of shipped JPEGs (Lepton-style). ⬜ *planned*
+- [x] **M22 · Lossless JPEG recompression** — Bit-exact recompression of the shipped JPEGs with our own VXJ coder: all 3,585 Xonotic JPEGs 182.5 → 151.1 MB, 0 mismatches (download form). *(2026-10-26)* · [evidence](benchmarks/reports/v2/xonotic-lossless-v3.4/RESULTS.md)
 - [ ] **M16 · Incremental repack** — Repack only the assets that changed. ⬜ *planned*
 - [ ] **M17 · Patch-friendly archives** — Measure and minimize archive bytes that change when one asset changes. ⬜ *planned*
 - [ ] **M18 · Faster VXLZ decode** — VXLZ decodes 2.4–4.6× slower than zstd on the same blocks. ⬜ *planned*
@@ -196,34 +234,27 @@ flowchart LR
 Mark progress with `python tools/roadmap.py done M9` (records today's date) or `python tools/roadmap.py set M13 active`; add or reword milestones in `docs/roadmap.json` and rerun `python tools/roadmap.py`. CI fails when this section is out of date.
 <!-- roadmap:end -->
 
-## Repository layout
-
-```
-vortexpak/            Python package: codec.py (lanes/RDSO/dictionaries), vfs.py
-                     (seekable VFS), bcn.py (GPU block compression), rdo.py,
-                     native.py (ctypes bridge), cli.py
-vortexpak_native/     Rust core: vxlz.rs (entropy codec), bcn.rs (BC1/4/5/7),
-                     vxtx.rs (AVX2 transforms), decoder.rs, vfs.rs, rdo.rs,
-                     c_api.rs -> vortexpak.h (cbindgen, CI-verified)
-tests/                Python tests (native + fallback modes), incl. fuzz + E2E CLI
-docs/FORMAT.md        VXPK container specification (strategies, lanes, dictionaries)
-docs/roadmap.json     roadmap source; tools/roadmap.py renders it into this README
-benchmarks/           rigorous.py + rigorous_quality.py (canonical benchmarks),
-                     reports/ (measured evidence), fetch_silesia.py; older scripts
-                     remain exploratory. Corpora live OUTSIDE the repo.
-examples/c/           pure-C consumer of the native ABI
-```
-
-## Build & test
+## Development
 
 ```powershell
-cargo build --release --manifest-path vortexpak_native/Cargo.toml
-pip install -e .
-python -m unittest discover -s tests -v
 cargo test --release --manifest-path vortexpak_native/Cargo.toml
+pip install -e ".[benchmark]"
+python -m unittest discover -s tests
+flake8
+mypy .
+python tools/roadmap.py --check
 ```
 
-Set `VORTEXPAK_DISABLE_NATIVE=1` to force the pure Python/NumPy fallback.
+| Path | Contents |
+|---|---|
+| `vortexpak/` | Python package: codec, VFS, CLI, ctypes bridge to the native core |
+| `vortexpak_native/` | Rust core: VXCM, VXLZ-ANS and VXJ coders, transforms, BCn, VFS, C ABI (`vortexpak.h`) |
+| `tests/` | Python tests, native and fallback |
+| `benchmarks/` | measurement scripts; evidence in `benchmarks/reports/` |
+| `docs/` | container format, benchmark protocol, roadmap source |
+| `examples/` | C programs using the native ABI |
+
+Changes per release: [CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

@@ -6,7 +6,7 @@
       {
         "gate": "Size",
         "target": "≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download)",
-        "today": "904.9 MB byte-exact (0.763×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB."
+        "today": "904.9 MB byte-exact (0.764×, compact layout), all 14,597 files SHA-256 verified; 4.9 % smaller than xz -9e (951.2 MB). 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB."
       },
       {
         "gate": "Exact",
@@ -26,12 +26,12 @@
       {
         "gate": "Load speed",
         "target": "No map loads slower than from the shipped pk3 files (median of 7 runs); single-asset read p99 ≤ 1 ms",
-        "today": "Not measured; VXLZ decodes 2.4–4.6× slower than zstd on the same blocks VXJ (JPEG) is download-form only; its install decode keeps pace with a 644.66 Mbit/s download."
+        "today": "Not measured in the engine yet. Download form at the 134.75 Mbit/s global median: 53.7 s download + 13.6 s extraction (16 threads) versus 70.4 s for the pk3 files; compact cold single-file read p99 357 ms. The game form (stream layout) never uses the download-only coders."
       },
       {
         "gate": "Iteration",
         "target": "Changing one texture rebuilds the archive in ≤ 5 s on 8 cores; the resulting patch is ≤ 2× that asset’s compressed size",
-        "today": "Full repack only: 18.0 s (stream) / 250.2 s (compact) on 16 workers; patch size not measured"
+        "today": "Full repack only: 298 s for the compact download form on 16 workers; patch size not measured"
       }
     ],
     "evidence": "benchmarks/reports/v2/north-star/BASELINE.md"
@@ -112,8 +112,14 @@
         {
           "id": "M24",
           "title": "Seekable compact archive",
-          "goal": "Keep ≤ 0.80× on Xonotic while a cold single-asset read stays ≤ 5 ms p99 (compact today: 373 ms).",
+          "goal": "Keep ≤ 0.80× on Xonotic while a cold single-asset read stays ≤ 5 ms p99 (compact today: 357 ms).",
           "status": "next"
+        },
+        {
+          "id": "M25",
+          "title": "Context-mixing download coder",
+          "goal": "Own context-mixing coder for the download form, admitted only while extraction stays within the download time at 134.75 Mbit/s; paq8px v217 measures a 15 % ceiling over VXCM on Xonotic slices.",
+          "status": "planned"
         }
       ]
     },
@@ -195,8 +201,10 @@
         {
           "id": "M22",
           "title": "Lossless JPEG recompression",
-          "goal": "Bit-exact recompression of the 173 MB of shipped JPEGs (Lepton-style).",
-          "status": "planned"
+          "goal": "Bit-exact recompression of the shipped JPEGs with our own VXJ coder: all 3,585 Xonotic JPEGs 182.5 → 151.1 MB, 0 mismatches (download form).",
+          "status": "done",
+          "date": "2026-10-26",
+          "evidence": "benchmarks/reports/v2/xonotic-lossless-v3.4/RESULTS.md"
         },
         {
           "id": "M16",
