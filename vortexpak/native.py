@@ -45,6 +45,7 @@ for _d in _candidate_dirs:
         _DLL_LOCATIONS.extend(sorted(_d.glob(_pat)))
 
 _lib: Optional[ctypes.CDLL] = None
+NATIVE_LIB_PATH: Optional[Path] = None
 _native_load_error: Optional[str] = None
 if _DISABLE_NATIVE:
     _native_load_error = "VORTEXPAK_DISABLE_NATIVE=1 (fallback forced)"
@@ -52,6 +53,7 @@ else:
     for loc in _DLL_LOCATIONS:
         try:
             _lib = ctypes.CDLL(str(loc))
+            NATIVE_LIB_PATH = loc.resolve()
             break
         except OSError as exc:
             _native_load_error = f"{loc.name}: {exc}"

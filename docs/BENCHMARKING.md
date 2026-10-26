@@ -303,3 +303,23 @@ CI smoke timings validate execution only and must not be used as performance dat
 Build the standalone graphical report after all runs complete:
 `python benchmarks/report_benchmarks.py benchmarks/reports/minetest benchmarks/reports/kenney benchmarks/reports/browserquest benchmarks/reports/silesia benchmarks/reports/kodak --output benchmarks/reports/index.html`.
 The HTML links to full raw observations; a chart alone is not the evidence.
+
+## Fast iteration on Xonotic
+
+For development iteration on the Xonotic lossless goal, three commands are
+provided by `benchmarks/xon_iter.py`:
+
+~~~powershell
+python benchmarks/xon_iter.py exact
+python benchmarks/xon_iter.py quick
+python benchmarks/xon_iter.py calibrate
+~~~
+
+| Tier | Command | Scope | Cost | Use |
+|---|---|---|---|---|
+| T1 | `python benchmarks/xon_iter.py quick` | fixed 6 % file sample | seconds | development decisions |
+| T2 | `python benchmarks/xon_iter.py exact` | whole archive from the block cache, exact bytes + SHA-256 | - | go/no-go |
+| T3 | `python benchmarks/xonotic_lossless.py` | full verification + strongest single-threaded competitors | - | the only source of published numbers |
+
+Rule: a quick estimate outside the calibrated band triggers recalibration
+(`python benchmarks/xon_iter.py calibrate`).

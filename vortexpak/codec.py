@@ -178,6 +178,28 @@ class MicroBlock:
 
 
 @dataclass
+class BlockPlan:
+    entries: List[AssetEntry]
+    raw_blocks: List[Tuple[int, str, bytes]]
+    lane_groups: Dict[str, List[Tuple[int, bytes]]]
+    lane_samples: Dict[str, List[bytes]]
+    total_raw_bytes: int
+    total_pixel_raw_bytes: int
+    tex_psnrs: List[float]
+    tex_ssims: List[float]
+    geom_psnrs: List[float]
+    total_tex_sse: float
+    total_tex_samples: int
+    max_tex_abs_err: int
+    gpu_qualities: List[Dict[str, Any]]
+    gpu_ratios: List[float]
+    gpu_formats: Dict[str, int]
+    gpu_fallbacks: Dict[str, int]
+    dedup_files: int
+    dedup_bytes: int
+
+
+@dataclass
 class VortexArchive:
     mode: str  # "strict" (100% bit-exact files) or "engine" (bit-exact data + lossless GPU pixel tensors)
     entries: List[AssetEntry]
@@ -1152,6 +1174,11 @@ class VortexPakCodec:
         return self.encode_files(file_tuples)
 
     def encode_files(self, file_tuples: List[Tuple[str, bytes]]) -> VortexArchive:
+        plan = self.plan_blocks(file_tuples)
+        return self.finish_archive(plan, self.compress_blocks(plan.raw_blocks))
+
+    def plan_blocks(self, file_tuples: List[Tuple[str, bytes]]) -> BlockPlan:
+        """Plan transforms, deduplication and block placement without compression."""
         entries: List[AssetEntry] = []
         seen_raw: Dict[Tuple[int, int], List[Tuple[bytes, AssetEntry]]] = {}
         duplicates: List[Tuple[AssetEntry, AssetEntry]] = []
@@ -1476,6 +1503,32 @@ class VortexPakCodec:
                         (bid, bdata)
                     )
 
+        return BlockPlan(
+            entries=entries,
+            raw_blocks=raw_blocks_to_compress,
+            lane_groups=lane_groups,
+            lane_samples=_lane_file_samples,
+            total_raw_bytes=total_raw_bytes,
+            total_pixel_raw_bytes=total_pixel_raw_bytes,
+            tex_psnrs=tex_psnrs,
+            tex_ssims=tex_ssims,
+            geom_psnrs=geom_psnrs,
+            total_tex_sse=total_tex_sse,
+            total_tex_samples=total_tex_samples,
+            max_tex_abs_err=max_tex_abs_err,
+            gpu_qualities=gpu_qualities,
+            gpu_ratios=gpu_ratios,
+            gpu_formats=gpu_formats,
+            gpu_fallbacks=gpu_fallbacks,
+            dedup_files=len(duplicates),
+            dedup_bytes=dedup_bytes,
+        )
+
+    def compress_blocks(
+        self, raw_blocks: List[Tuple[int, str, bytes]]
+    ) -> List[MicroBlock]:
+        """Compress planned blocks, preserving the existing backend dispatch."""
+        raw_blocks_to_compress = raw_blocks
         if self.entropy_backend == "vxlz" and IS_NATIVE_AVAILABLE:
             vxlz_res = native_vxlz_compress_blocks_parallel(
                 raw_blocks_to_compress, allow_bypass=True
@@ -1509,9 +1562,26 @@ class VortexPakCodec:
             blocks = list(self._pool.map(_compress_one, raw_blocks_to_compress))
 
         blocks.sort(key=lambda b: b.block_id)
-        if self.entropy_backend != "vxcm":
-            blocks = _apply_lane_dictionaries(blocks, lane_groups, _lane_file_samples)
+        return blocks
 
+    def finish_archive(
+        self, plan: BlockPlan, blocks: List[MicroBlock]
+    ) -> VortexArchive:
+        """Apply lane dictionaries and publish metrics for a completed plan."""
+        if self.entropy_backend != "vxcm":
+            blocks = _apply_lane_dictionaries(
+                blocks, plan.lane_groups, plan.lane_samples
+            )
+        tex_psnrs = plan.tex_psnrs
+        tex_ssims = plan.tex_ssims
+        geom_psnrs = plan.geom_psnrs
+        total_tex_sse = plan.total_tex_sse
+        total_tex_samples = plan.total_tex_samples
+        max_tex_abs_err = plan.max_tex_abs_err
+        gpu_qualities = plan.gpu_qualities
+        gpu_ratios = plan.gpu_ratios
+        gpu_formats = plan.gpu_formats
+        gpu_fallbacks = plan.gpu_fallbacks
         all_psnrs = tex_psnrs + geom_psnrs
         if self.rdo and (all_psnrs or total_tex_samples > 0):
             global_tex_mse = total_tex_sse / max(total_tex_samples, 1)
@@ -1598,15 +1668,15 @@ class VortexPakCodec:
             )
 
         self.last_rdo_metrics.update(
-            dedup_files=len(duplicates), dedup_bytes=dedup_bytes
+            dedup_files=plan.dedup_files, dedup_bytes=plan.dedup_bytes
         )
 
         return VortexArchive(
             mode=self.mode,
-            entries=entries,
+            entries=plan.entries,
             blocks=blocks,
-            total_raw_bytes=total_raw_bytes,
-            total_pixel_raw_bytes=total_pixel_raw_bytes,
+            total_raw_bytes=plan.total_raw_bytes,
+            total_pixel_raw_bytes=plan.total_pixel_raw_bytes,
         )
 
     def decode_archive(

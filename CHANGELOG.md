@@ -6,6 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-26
+
+### Added
+- `benchmarks/xon_iter.py`: fast iteration on the Xonotic lossless goal. `exact`
+  rebuilds the whole archive from a content-addressed block cache (keyed by the
+  raw block, the native library, `codec.py` and `native.py`) and reproduces the
+  v3.2.1 archive (924,623,172 B) to the byte with every file SHA-256 verified;
+  `quick` encodes a fixed 6 % file sample and estimates the full size with a
+  calibrated error band; `calibrate` records the estimate against the exact size.
+  Public claims still come only from `benchmarks/xonotic_lossless.py`.
+- `VortexPakCodec.plan_blocks`, `compress_blocks` and `finish_archive`
+  (`encode_files` is their composition; archives are unchanged).
+
 ## [3.2.1] - 2026-10-26
 
 ### Added

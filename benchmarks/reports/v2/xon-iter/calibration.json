@@ -1,0 +1,18 @@
+[
+  {
+    "utc": "2026-10-26T14:58:39.906474+00:00",
+    "git_head": "d1ddd4a4f14deb3fd7f4cd545179d275aa492c90",
+    "fingerprint": "ce9760325d8aacd1214f9f6d4db50d37fc498aa14afc047da6fab639a0aabf6f",
+    "sample_files": 1715,
+    "sample_bytes": 69649554,
+    "full_bytes": 924623172
+  },
+  {
+    "utc": "2026-10-26T15:09:11.813997+00:00",
+    "git_head": "d1ddd4a4f14deb3fd7f4cd545179d275aa492c90",
+    "fingerprint": "ce9760325d8aacd1214f9f6d4db50d37fc498aa14afc047da6fab639a0aabf6f",
+    "sample_files": 1715,
+    "sample_bytes": 69649554,
+    "full_bytes": 924623172
+  }
+]
