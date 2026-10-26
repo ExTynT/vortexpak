@@ -58,6 +58,8 @@
 
 #define TX_DXT_SPLIT (1 << 6)
 
+#define TX_JPEG_VXJ (1 << 7)
+
 #define TX_RAW_DENSE 0
 
 #define TX_ALPHA_STRIP (1 << 0)
@@ -247,6 +249,16 @@ int64_t vxcm_decompress_c(const uint8_t *src_ptr,
 int64_t dxt_split_c(const uint8_t *src_ptr, uintptr_t src_len, uint8_t *dst_ptr, uintptr_t dst_cap);
 
 int64_t dxt_merge_c(const uint8_t *src_ptr, uintptr_t src_len, uint8_t *dst_ptr, uintptr_t dst_cap);
+
+int64_t vxj_encode_c(const uint8_t *src_ptr,
+                     uintptr_t src_len,
+                     uint8_t *dst_ptr,
+                     uintptr_t dst_cap);
+
+int64_t vxj_decode_c(const uint8_t *src_ptr,
+                     uintptr_t src_len,
+                     uint8_t *dst_ptr,
+                     uintptr_t dst_cap);
 
 int32_t vxlz_compress_blocks_parallel_c(struct CVxlzCompressDesc *descs_ptr, uintptr_t num_blocks);
 

@@ -645,6 +645,52 @@ pub unsafe extern "C" fn dxt_merge_c(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn vxj_encode_c(
+    src_ptr: *const u8,
+    src_len: usize,
+    dst_ptr: *mut u8,
+    dst_cap: usize,
+) -> i64 {
+    if src_ptr.is_null() || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    match crate::vxj::vxj_encode(src) {
+        Ok(rec) => {
+            if rec.len() > dst_cap {
+                return -2;
+            }
+            std::ptr::copy_nonoverlapping(rec.as_ptr(), dst_ptr, rec.len());
+            rec.len() as i64
+        }
+        Err(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vxj_decode_c(
+    src_ptr: *const u8,
+    src_len: usize,
+    dst_ptr: *mut u8,
+    dst_cap: usize,
+) -> i64 {
+    if src_ptr.is_null() || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    match crate::vxj::vxj_decode(src) {
+        Ok(raw) => {
+            if raw.len() > dst_cap {
+                return -2;
+            }
+            std::ptr::copy_nonoverlapping(raw.as_ptr(), dst_ptr, raw.len());
+            raw.len() as i64
+        }
+        Err(_) => -2,
+    }
+}
+
 #[repr(C)]
 pub struct CVxlzCompressDesc {
     pub src_ptr: *const u8,

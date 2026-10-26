@@ -5,5 +5,6 @@ pub mod dxt;
 pub mod rdo;
 pub mod vfs;
 pub mod vxcm;
+pub mod vxj;
 pub mod vxlz;
 pub mod vxtx;

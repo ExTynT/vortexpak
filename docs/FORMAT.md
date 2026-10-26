@@ -115,7 +115,8 @@ so random access is fully preserved.
 ### Entry transform flags (`tx_flags`)
 
 Bits 0–5 describe engine-mode texture tensors. Bit 6 describes reversible
-raw DDS preprocessing in either archive mode.
+raw DDS preprocessing in either archive mode. Bit 7 describes bit-exact JPEG
+recompression, written only in the compact download layout with VXCM.
 
 | Bit | Name | Meaning |
 | --- | --- | --- |
@@ -126,6 +127,7 @@ raw DDS preprocessing in either archive mode.
 | 4 | `TX_MIPS` | `TX_BCN` payload holds a mip chain, largest level first |
 | 5 | `TX_SRGB` | `TX_BCN` color texture, sample as sRGB (`*_UNORM_SRGB`) |
 | 6 | `TX_DXT_SPLIT` | non-texture payload is a reversible `VXD1` field-split DDS record |
+| 7 | `TX_JPEG_VXJ` | non-texture payload is a bit-exact `VXJ1` JPEG record (compact download layout only) |
 | — | `0` | dense raw tensor |
 
 ### DXT field-split record (`TX_DXT_SPLIT`)
@@ -154,6 +156,25 @@ length plus 10 bytes. Stored stripes are concatenated before merging.
 All raw read APIs, including unmaterialized reads, return the original DDS
 bytes rather than the record; entry `raw_size` and checksum describe those
 original bytes.
+
+### Bit-exact JPEG record (`TX_JPEG_VXJ`)
+
+The normative decoder is `vortexpak_native/src/vxj.rs`. The payload is:
+
+```
+b"VXJ1" | u32le header_len | u32le trailer_len |
+verbatim header up to and including SOS | verbatim trailer |
+arithmetic-coded DCT coefficient body
+```
+
+The encoder writes this transform only for raw `.jpg`/`.jpeg` assets in the
+compact (download) layout with the VXCM backend, and only when the record is
+smaller than the original JPEG. It is never written in the stream (game) layout.
+The record stays in the media lane; duplicate entries share its bytes and flag.
+Stored stripes are concatenated before decoding. Every raw read API returns the
+original JPEG bytes, including unmaterialized reads. The decoder must reproduce
+exactly `raw_size` bytes; the entry checksum also describes the original JPEG.
+Decoding requires the native core.
 
 ### VXTX-GPU block compression (`TX_BCN`)
 

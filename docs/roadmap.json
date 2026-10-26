@@ -6,7 +6,7 @@
       {
         "gate": "Size",
         "target": "≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download)",
-        "today": "924.6 MB byte-exact (0.780×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB."
+        "today": "904.9 MB byte-exact (0.763×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB."
       },
       {
         "gate": "Exact",
@@ -26,7 +26,7 @@
       {
         "gate": "Load speed",
         "target": "No map loads slower than from the shipped pk3 files (median of 7 runs); single-asset read p99 ≤ 1 ms",
-        "today": "Not measured; VXLZ decodes 2.4–4.6× slower than zstd on the same blocks"
+        "today": "Not measured; VXLZ decodes 2.4–4.6× slower than zstd on the same blocks VXJ (JPEG) is download-form only; its install decode keeps pace with a 644.66 Mbit/s download."
       },
       {
         "gate": "Iteration",

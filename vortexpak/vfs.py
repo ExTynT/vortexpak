@@ -32,8 +32,14 @@ from .codec import (
     TX_MIPS,
     TX_SRGB,
     TX_DXT_SPLIT,
+    TX_JPEG_VXJ,
 )
-from .native import IS_NATIVE_AVAILABLE, native_decompress_block, native_dxt_merge
+from .native import (
+    IS_NATIVE_AVAILABLE,
+    native_decompress_block,
+    native_dxt_merge,
+    native_vxj_decode,
+)
 
 
 class BlockLRUCache:
@@ -303,6 +309,10 @@ class VortexVFS:
             raise FileNotFoundError(f"Asset not found in VFS: {rel_path}")
 
         entry = self._index[clean_path]
+        if entry.tx_flags & TX_JPEG_VXJ and not IS_NATIVE_AVAILABLE:
+            raise VXPKError(
+                f"entry {entry.rel_path} uses VXJ and needs the native core"
+            )
 
         # Multi-block striped asset
         if entry.stripe_spans:
@@ -323,6 +333,8 @@ class VortexVFS:
                 return bytes(arr)
             if entry.tx_flags & TX_DXT_SPLIT:
                 return native_dxt_merge(joined)
+            if entry.tx_flags & TX_JPEG_VXJ:
+                return native_vxj_decode(joined, entry.raw_size)
             return joined
 
         # Single block asset
@@ -345,6 +357,8 @@ class VortexVFS:
 
         if entry.tx_flags & TX_DXT_SPLIT:
             return native_dxt_merge(bytes(slice_data))
+        if entry.tx_flags & TX_JPEG_VXJ:
+            return native_vxj_decode(bytes(slice_data), entry.raw_size)
 
         if entry.aux_block_id >= 0:
             meta_bytes = bytes(slice_data)

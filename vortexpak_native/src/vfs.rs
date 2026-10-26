@@ -72,6 +72,7 @@ pub const TX_MIPS: u32 = 1 << 4;
 /// TX_BCN color texture that should be sampled as sRGB.
 pub const TX_SRGB: u32 = 1 << 5;
 pub const TX_DXT_SPLIT: u32 = 1 << 6;
+pub const TX_JPEG_VXJ: u32 = 1 << 7;
 
 /// Stored mip level sizes for a w x h texture: halve while the next level is
 /// still a whole number of 4x4 blocks. Level 0 is always included.
@@ -149,6 +150,19 @@ fn decode_bcn_entry(entry: &VfsAssetEntry, payload: &[u8]) -> Result<Vec<u8>, St
         level0 = &payload[..sizes[0]];
     }
     crate::bcn::bcn_decode(fmt, level0, w, h)
+}
+
+fn decode_vxj_entry(entry: &VfsAssetEntry, payload: &[u8]) -> Result<Vec<u8>, String> {
+    let raw = crate::vxj::vxj_decode(payload)?;
+    if raw.len() != entry.raw_size {
+        return Err(format!(
+            "VXJ entry {} decoded to {} bytes, expected {}",
+            entry.rel_path,
+            raw.len(),
+            entry.raw_size
+        ));
+    }
+    Ok(raw)
 }
 
 impl<R: Read + Seek> VortexVfs<R> {
@@ -426,6 +440,9 @@ impl<R: Read + Seek> VortexVfs<R> {
             if !entry.is_texture_tensor && entry.tx_flags & TX_DXT_SPLIT != 0 {
                 return crate::dxt::dxt_merge(&out);
             }
+            if !entry.is_texture_tensor && entry.tx_flags & TX_JPEG_VXJ != 0 {
+                return decode_vxj_entry(&entry, &out);
+            }
             if materialize_rgba && entry.is_texture_tensor && entry.tx_flags & TX_BCN != 0 {
                 return decode_bcn_entry(&entry, &out);
             }
@@ -513,6 +530,8 @@ impl<R: Read + Seek> VortexVfs<R> {
             Ok(tensor_buf)
         } else if entry.tx_flags & TX_DXT_SPLIT != 0 {
             crate::dxt::dxt_merge(raw_slice)
+        } else if entry.tx_flags & TX_JPEG_VXJ != 0 {
+            decode_vxj_entry(&entry, raw_slice)
         } else {
             Ok(raw_slice.to_vec())
         }
@@ -592,6 +611,67 @@ mod mip_tests {
         vfs.block_cache = HashMap::from([(0, rec[..mid].to_vec()), (1, rec[mid..].to_vec())]);
         vfs.entries[0].stripe_spans = vec![(0, 0, mid), (1, 0, rec.len() - mid)];
         assert_eq!(vfs.read_asset("test.dds", true).unwrap(), dds);
+    }
+
+    #[test]
+    fn vxj_reads_original_bytes_and_validates_size() {
+        let jpeg = hex_decode(concat!(
+            "ffd8ffe000104a46494600010100000100010000ffdb00430008060607060508070707",
+            "0909080a0c140d0c0b0b0c1912130f141d1a1f1e1d1a1c1c20242e2720222c231c",
+            "1c2837292c30313434341f27393d38323c2e333432ffc0000b080020002001011100",
+            "ffc4001f0000010501010101010100000000000000000102030405060708090a0b",
+            "ffc400b5100002010303020403050504040000017d01020300041105122131410613",
+            "516107227114328191a1082342b1c11552d1f02433627282090a161718191a252627",
+            "28292a3435363738393a434445464748494a535455565758595a636465666768696a",
+            "737475767778797a838485868788898a92939495969798999aa2a3a4a5a6a7a8a9aa",
+            "b2b3b4b5b6b7b8b9bac2c3c4c5c6c7c8c9cad2d3d4d5d6d7d8d9dae1e2e3e4",
+            "e5e6e7e8e9eaf1f2f3f4f5f6f7f8f9faffda0008010100003f0028a28a28a28a28",
+            "a28a28a28affd9"
+        ))
+        .unwrap();
+        let rec = crate::vxj::vxj_encode(&jpeg).unwrap();
+        let entry = VfsAssetEntry {
+            rel_path: "test.jpg".into(),
+            raw_size: jpeg.len(),
+            is_texture_tensor: false,
+            tx_flags: TX_JPEG_VXJ,
+            tx_shape: vec![],
+            tx_mode: String::new(),
+            tx_rle_unique_rows: 0,
+            block_id: 0,
+            offset_in_block: 0,
+            length_in_block: rec.len(),
+            aux_block_id: -1,
+            aux_offset: 0,
+            aux_length: 0,
+            stripe_spans: vec![],
+        };
+        let mut vfs = VortexVfs {
+            reader: std::io::Cursor::new(Vec::<u8>::new()),
+            mode: "strict".into(),
+            total_raw_bytes: jpeg.len(),
+            entries: vec![entry],
+            path_index: HashMap::from([("test.jpg".into(), 0)]),
+            blocks: vec![],
+            block_cache: HashMap::from([(0, rec.clone())]),
+            lru_queue: VecDeque::from([0]),
+            cache_capacity: 2,
+        };
+        assert_eq!(vfs.get_asset_size("test.jpg"), Some(jpeg.len()));
+        for materialize in [false, true] {
+            assert_eq!(vfs.read_asset("test.jpg", materialize).unwrap(), jpeg);
+        }
+        vfs.entries[0].raw_size += 1;
+        assert!(vfs.read_asset("test.jpg", false).is_err());
+        vfs.entries[0].raw_size = jpeg.len();
+        let mid = rec.len() / 2;
+        vfs.block_cache = HashMap::from([(0, rec[..mid].to_vec()), (1, rec[mid..].to_vec())]);
+        vfs.entries[0].stripe_spans = vec![(0, 0, mid), (1, 0, rec.len() - mid)];
+        for materialize in [false, true] {
+            assert_eq!(vfs.read_asset("test.jpg", materialize).unwrap(), jpeg);
+        }
+        vfs.entries[0].raw_size += 1;
+        assert!(vfs.read_asset("test.jpg", false).is_err());
     }
 
     #[test]

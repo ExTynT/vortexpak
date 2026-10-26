@@ -78,11 +78,11 @@ The legacy capability matrix (`benchmarks/quality_matrix.py`) describes features
 
 | Gate | Target | Today |
 |---|---|---|
-| **Size** | ≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download) | 924.6 MB byte-exact (0.780×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB. |
+| **Size** | ≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download) | 904.9 MB byte-exact (0.763×, compact layout, VXCM backend), every file SHA-256 verified; compact single-file reads p99 373 ms. 27 % of the download is already-compressed .jpg/.ogg, so lossless alone stops far above 711 MB. |
 | **Exact** | Every non-texture file byte-identical (SHA-256); JPEG recompression bit-exact | Strict mode verified byte-exact on all 14,597 files |
 | **Texture quality** | Every re-encoded DXT texture ≥ 40 dB RGB and alpha against the shipped texture, on every mip level | Shipped .dds (DXT1 982 MB, DXT5 621 MB raw) are opaque data; no DDS ingest, no BC3 (DXT5) encoder, no RDO for existing blocks |
 | **Real game** | Stock Xonotic 0.8.6 runs from the .vpak through a DarkPlaces filesystem backend on a real GPU: every official map loads, a recorded demo plays to the end, zero missing assets | No engine backend; never run on a GPU |
-| **Load speed** | No map loads slower than from the shipped pk3 files (median of 7 runs); single-asset read p99 ≤ 1 ms | Not measured; VXLZ decodes 2.4–4.6× slower than zstd on the same blocks |
+| **Load speed** | No map loads slower than from the shipped pk3 files (median of 7 runs); single-asset read p99 ≤ 1 ms | Not measured; VXLZ decodes 2.4–4.6× slower than zstd on the same blocks VXJ (JPEG) is download-form only; its install decode keeps pace with a 644.66 Mbit/s download. |
 | **Iteration** | Changing one texture rebuilds the archive in ≤ 5 s on 8 cores; the resulting patch is ≤ 2× that asset’s compressed size | Full repack only: 18.0 s (stream) / 250.2 s (compact) on 16 workers; patch size not measured |
 
 Every gate must hold at once, in one reproducible run. [Baseline evidence](benchmarks/reports/v2/north-star/BASELINE.md)

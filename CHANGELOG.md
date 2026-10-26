@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.4.0] - 2026-10-26
+
+### Added
+- Tx flag bit 7 `TX_JPEG_VXJ`: JPEGs in the download form (`--layout compact`, VXCM backend) are stored as `VXJ1` records from VortexPak's own bit-exact JPEG recompressor (`vortexpak_native/src/vxj.rs`): all 3,585 Xonotic JPEGs 182,545,848 B -> 151,065,671 B (0.828x), 0 mismatches. The game form (`--layout stream`) never uses VXJ.
+- C-ABI `vxj_encode_c`, `vxj_decode_c`; `examples/vxj_bench.rs`.
+- Xonotic lossless (download form): 904,916,331 B = 0.7635x of the shipped download, all 14,597 files SHA-256 verified (full decode and VFS); versus xz -9e -T1 951.2 MB and zstd --ultra -22 --long=31 -T1 1014.1 MB. Evidence: benchmarks/reports/v2/xonotic-lossless-v3.4/RESULTS.md.
+
+### Changed
+- VXJ speed gate is derived from the North Star: install-time decode on 8 threads must keep pace with a 644.66 Mbit/s download (fastest national median fixed broadband, Ookla Speedtest Global Index, March 2026); measured about 91-96 MB/s of compressed input versus 80.58 MB/s required.
+
 ## [3.3.0] - 2026-10-26
 
 ### Added

@@ -303,6 +303,20 @@ if IS_NATIVE_AVAILABLE and _lib is not None:
         ctypes.c_size_t,
     ]
     _lib.dxt_merge_c.restype = ctypes.c_int64
+    _lib.vxj_encode_c.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _lib.vxj_encode_c.restype = ctypes.c_int64
+    _lib.vxj_decode_c.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _lib.vxj_decode_c.restype = ctypes.c_int64
 
     class CVxlzCompressDesc(ctypes.Structure):
         _fields_ = [
@@ -752,7 +766,7 @@ def native_decode_archive_parallel(
                 results[e.rel_path] = np.frombuffer(payload, dtype=np.uint8).reshape(
                     work_shape
                 )
-        elif e.tx_flags & (1 << 6):  # TX_DXT_SPLIT
+        elif e.tx_flags & ((1 << 6) | (1 << 7)):  # TX_DXT_SPLIT / TX_JPEG_VXJ
             if e.stripe_spans:
                 rec = b"".join(
                     mv_big[block_offsets[b] + o : block_offsets[b] + o + ln]
@@ -761,7 +775,11 @@ def native_decode_archive_parallel(
             else:
                 start_off = block_offsets[e.block_id] + e.offset_in_block
                 rec = bytes(mv_big[start_off : start_off + e.length_in_block])
-            results[e.rel_path] = native_dxt_merge(rec)
+            results[e.rel_path] = (
+                native_vxj_decode(rec, e.raw_size)
+                if e.tx_flags & (1 << 7)
+                else native_dxt_merge(rec)
+            )
         elif e.stripe_spans:
             # Consecutive stripes in `big_buf` are already contiguous in memory!
             b0, off0, _ = e.stripe_spans[0]
@@ -961,6 +979,31 @@ def native_dxt_merge(rec: bytes) -> bytes:
     written = _lib.dxt_merge_c(rec, len(rec), out, dst_cap)
     if written < 0 or written != dst_cap:
         raise ValueError("Invalid DXT record")
+    return out.raw[:written]
+
+
+def native_vxj_encode(raw: bytes) -> Optional[bytes]:
+    if not IS_NATIVE_AVAILABLE or _lib is None:
+        return None
+    dst_cap = len(raw) + len(raw) // 2 + 65536
+    out = ctypes.create_string_buffer(dst_cap)
+    written = _lib.vxj_encode_c(raw, len(raw), out, dst_cap)
+    if written == 0:
+        return None
+    if written < 0:
+        raise RuntimeError("VXJ encode failed")
+    return out.raw[:written]
+
+
+def native_vxj_decode(rec: bytes, raw_size: int) -> bytes:
+    if not IS_NATIVE_AVAILABLE or _lib is None:
+        raise RuntimeError("VXJ decode needs the native core")
+    if raw_size < 0:
+        raise RuntimeError("Invalid VXJ raw size")
+    out = ctypes.create_string_buffer(max(raw_size, 1))
+    written = _lib.vxj_decode_c(rec, len(rec), out, raw_size)
+    if written < 0 or written != raw_size:
+        raise RuntimeError("Invalid VXJ record or raw size")
     return out.raw[:written]
 
 

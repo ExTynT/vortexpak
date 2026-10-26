@@ -61,6 +61,8 @@ from .native import (
     native_vxcm_decompress,
     native_dxt_split,
     native_dxt_merge,
+    native_vxj_encode,
+    native_vxj_decode,
 )
 from .bcn import (
     GPU_FORMAT_IDS,
@@ -142,6 +144,7 @@ TX_BCN = 1 << 3  # payload is GPU block data (BC1/BC4/BC5/BC7/BCX), see vortexpa
 TX_MIPS = 1 << 4  # TX_BCN payload holds a full mip chain (bcn.mip_dims), largest first
 TX_SRGB = 1 << 5  # TX_BCN color texture: sample as sRGB (DXGI *_UNORM_SRGB)
 TX_DXT_SPLIT = 1 << 6
+TX_JPEG_VXJ = 1 << 7
 
 
 @dataclass
@@ -1398,6 +1401,11 @@ class VortexPakCodec:
                 if rec is not None:
                     raw_bytes = rec
                     entry.tx_flags |= TX_DXT_SPLIT
+            elif compact_vxcm and ext in (".jpg", ".jpeg"):
+                rec = native_vxj_encode(raw_bytes)
+                if rec is not None and len(rec) < len(raw_bytes):
+                    raw_bytes = rec
+                    entry.tx_flags |= TX_JPEG_VXJ
 
             if ext in (".ogg", ".mp3", ".jpg", ".jpeg", ".fla"):
                 lane_media.append((entry, raw_bytes))
@@ -1688,6 +1696,12 @@ class VortexPakCodec:
         Decompress all micro-blocks in parallel across CPU cores and return a dictionary
         mapping `rel_path` -> `bytes`/`memoryview` or `np.ndarray` (for VXTX textures in engine mode).
         """
+        if not IS_NATIVE_AVAILABLE:
+            for entry in archive.entries:
+                if entry.tx_flags & TX_JPEG_VXJ:
+                    raise VXPKError(
+                        f"entry {entry.rel_path} uses VXJ and needs the native core"
+                    )
         block_by_id = {b.block_id: b for b in archive.blocks}
         _dict_cache: Dict[int, bytes] = {}
 
@@ -1733,6 +1747,14 @@ class VortexPakCodec:
                             for bid, off, ln in e.stripe_spans
                         )
                     )
+                elif e.tx_flags & TX_JPEG_VXJ:
+                    results[e.rel_path] = native_vxj_decode(
+                        b"".join(
+                            block_views[bid][off : off + ln]
+                            for bid, off, ln in e.stripe_spans
+                        ),
+                        e.raw_size,
+                    )
                 elif not materialize_full_rgba:
                     results[e.rel_path] = tuple(
                         block_views[bid][off : off + ln]
@@ -1765,6 +1787,8 @@ class VortexPakCodec:
                 )
             elif e.tx_flags & TX_DXT_SPLIT:
                 results[e.rel_path] = native_dxt_merge(bytes(mv))
+            elif e.tx_flags & TX_JPEG_VXJ:
+                results[e.rel_path] = native_vxj_decode(bytes(mv), e.raw_size)
             elif e.aux_block_id >= 0:
                 meta_bytes = bytes(mv)
                 idat_mv = block_views[e.aux_block_id][
