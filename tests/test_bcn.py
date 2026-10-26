@@ -267,7 +267,10 @@ class TestGpuArchiveIntegration(unittest.TestCase):
         vpak.write_bytes(codec.encode_directory(self.root / "game").to_bytes())
         with VortexVFS.open(vpak) as vfs:
             raw = vfs.read_bytes("textures/t0.png", materialize_full_rgba=False)
-            self.assertEqual(len(raw), 32 * 32 // 2)
+            levels = vfs.texture_info("textures/t0.png")["levels"]
+            self.assertEqual([lv["width"] for lv in levels], [32, 16, 8, 4])
+            self.assertEqual(len(raw), sum(lv["size"] for lv in levels))
+            self.assertEqual(levels[0]["size"], 32 * 32 // 2)
             rgba = vfs.read_bytes("textures/t0.png", materialize_full_rgba=True)
             self.assertEqual(len(rgba), 32 * 32 * 4)
             img = vfs.read_texture("textures/t0.png", as_pil=True)
@@ -324,6 +327,96 @@ class TestGpuArchiveIntegration(unittest.TestCase):
         )
         self.assertEqual(res.returncode, 0, res.stderr)
         self.assertIn("XXH3-64 Verified:  True", res.stdout)
+
+
+class TestGpuQualityGuarantees(unittest.TestCase):
+    """Lossy GPU paths never undercut the declared floor; strict stays exact."""
+
+    FLOOR = 35.0
+
+    @staticmethod
+    def _png(arr: np.ndarray) -> bytes:
+        buf = io.BytesIO()
+        Image.fromarray(arr).save(buf, format="PNG")
+        return buf.getvalue()
+
+    def _pack(self, arr: np.ndarray, **kw):
+        codec = VortexPakCodec(mode="engine", **kw)
+        arch = VortexArchive.from_bytes(
+            codec.encode_files([("t.png", self._png(arr))]).to_bytes()
+        )
+        ok, _ = codec.verify_archive(arch)
+        self.assertTrue(ok)
+        decoded = codec.decode_archive(arch, materialize_full_rgba=True)["t.png"]
+        return arch.entries[0], codec.last_rdo_metrics, decoded
+
+    @staticmethod
+    def _psnr(a: np.ndarray, b: np.ndarray) -> float:
+        mse = float(np.mean((a.astype(np.float64) - b.astype(np.float64)) ** 2))
+        return float("inf") if mse == 0 else 10 * np.log10(255.0**2 / mse)
+
+    def test_strict_rejects_lossy_options(self):
+        for kw in ({"rdo": True}, {"gpu": "auto"}, {"gpu": "bc1"}):
+            with self.assertRaisesRegex(ValueError, "byte-exact"):
+                VortexPakCodec(mode="strict", **kw)
+        for floor in (0.0, -1.0, 101.0):
+            with self.assertRaises(ValueError):
+                VortexPakCodec(mode="engine", gpu="auto", gpu_min_psnr_db=floor)
+
+    def test_cli_rejects_strict_lossy_pack(self):
+        with tempfile.TemporaryDirectory() as td:
+            res = subprocess.run(
+                [sys.executable, "-m", "vortexpak.cli", "pack", td, td + "/x.vpak",
+                 "--mode", "strict", "--rdo"],
+                capture_output=True, text=True,
+            )
+        self.assertEqual(res.returncode, 2)
+        self.assertIn("byte-exact", res.stderr)
+
+    def test_auto_never_ships_below_floor(self):
+        noise = np.random.default_rng(1).integers(0, 256, (64, 64, 4), dtype=np.uint8)
+        noise[..., 3] = 255
+        entry, m, decoded = self._pack(noise, gpu="auto")
+        if entry.tx_flags & TX_BCN:
+            self.assertGreaterEqual(self._psnr(noise[..., :3], decoded[..., :3]), self.FLOOR)
+            self.assertTrue((decoded[..., 3] == 255).all())
+        else:
+            np.testing.assert_array_equal(decoded, noise)
+            self.assertEqual(m["gpu_lossless_fallbacks"]["below_floor"], 1)
+        self.assertEqual(m["gpu_min_psnr_db"], self.FLOOR)
+
+    def test_auto_takes_cheapest_format_that_passes(self):
+        noise = np.random.default_rng(1).integers(0, 256, (64, 64, 4), dtype=np.uint8)
+        noise[..., 3] = 255
+        entry, m, _ = self._pack(noise, gpu="auto", gpu_min_psnr_db=1.0)
+        self.assertEqual(entry.tx_mode, "BC1")
+        self.assertEqual(m["gpu_formats"], {"BC1": 1})
+
+    def test_auto_smooth_alpha_is_not_squeezed_into_bc1(self):
+        arr = np.zeros((64, 64, 4), dtype=np.uint8)
+        arr[..., :3] = (100, 150, 200)
+        arr[..., 3] = np.linspace(0, 255, 64, dtype=np.uint8)[None, :]
+        entry, _, decoded = self._pack(arr, gpu="auto")
+        self.assertNotEqual(entry.tx_mode, "BC1")
+        self.assertGreaterEqual(self._psnr(arr[..., 3], decoded[..., 3]), self.FLOOR)
+        self.assertGreaterEqual(self._psnr(arr[..., :3], decoded[..., :3]), self.FLOOR)
+
+    def test_bc7_keeps_opaque_alpha_exact(self):
+        a = np.random.default_rng(3).integers(0, 256, (16, 16, 4), dtype=np.uint8)
+        a[..., 3] = 255
+        src = a.tobytes()
+        for blocks in (encode_bcn(src, 16, 16, BCN_BC7), _fallback_encode(src, 16, 16, BCN_BC7)):
+            d = np.frombuffer(decode_bcn(blocks, 16, 16, BCN_BC7), np.uint8)
+            self.assertTrue((d[3::4] == 255).all())
+
+    def test_reported_psnr_excludes_opaque_alpha(self):
+        arr = np.frombuffer(_sample_rgba(), np.uint8).reshape(64, 64, 4).copy()
+        arr[..., 3] = 255
+        _, m, decoded = self._pack(arr, gpu="bc1")
+        rgb = self._psnr(arr[..., :3], decoded[..., :3])
+        self.assertAlmostEqual(m["gpu_color_psnr_db"], rgb, places=2)
+        self.assertLess(m["gpu_color_psnr_db"], self._psnr(arr, decoded) - 1.0)
+        self.assertEqual(m["gpu_alpha_exact_count"], 1)
 
 
 if __name__ == "__main__":

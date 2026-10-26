@@ -28,6 +28,9 @@ from .codec import (
     _decode_texture_vxtx,
     _decompress_block,
     parse_vpk_meta,
+    TX_BCN,
+    TX_MIPS,
+    TX_SRGB,
 )
 from .native import IS_NATIVE_AVAILABLE, native_decompress_block
 
@@ -183,6 +186,52 @@ class VortexVFS:
             "length_in_block": e.length_in_block,
             "stripe_spans_count": len(e.stripe_spans),
         }
+
+    def texture_info(self, rel_path: str) -> Dict[str, Any]:
+        """GPU upload description of a block-compressed texture: format,
+        color space and every stored mip level as (width, height, offset,
+        size) into the payload returned by read_bytes(materialize_full_rgba=False)."""
+        from .bcn import GPU_FORMAT_IDS, BCN_BCX, level_bytes, mip_dims
+
+        e = self._index.get(rel_path.replace("\\", "/"))
+        if e is None:
+            raise FileNotFoundError(f"Asset not found in VFS: {rel_path}")
+        if not (e.is_texture_tensor and e.tx_flags & TX_BCN):
+            raise ValueError(f"{rel_path} is not a GPU block-compressed texture")
+        h, w = e.tx_shape[0], e.tx_shape[1]
+        fmt = GPU_FORMAT_IDS[e.tx_mode]
+        dims = mip_dims(w, h) if e.tx_flags & TX_MIPS else [(w, h)]
+        levels, offset = [], 0
+        for lw, lh in dims:
+            size = level_bytes(lw, lh, fmt)
+            levels.append({"width": lw, "height": lh, "offset": offset, "size": size})
+            offset += size
+        return {
+            "format": e.tx_mode,
+            "gpu_native": fmt != BCN_BCX,
+            "srgb": bool(e.tx_flags & TX_SRGB),
+            "width": w,
+            "height": h,
+            "levels": levels if fmt != BCN_BCX else [],
+        }
+
+    def read_dds(self, rel_path: str) -> bytes:
+        """The texture as a standalone DDS file (DX10 header, full mip chain),
+        loadable by D3D/Vulkan tooling, texconv, RenderDoc and engine importers."""
+        from .bcn import GPU_FORMAT_IDS, to_dds
+
+        info = self.texture_info(rel_path)
+        if not info["gpu_native"]:
+            raise ValueError("BCX is storage-only; read RGBA via read_texture instead")
+        payload = self.read_bytes(rel_path, materialize_full_rgba=False)
+        return to_dds(
+            payload,
+            info["width"],
+            info["height"],
+            GPU_FORMAT_IDS[info["format"]],
+            len(info["levels"]),
+            info["srgb"],
+        )
 
     def _load_block_decompressed(self, block_id: int) -> bytes:
         """Fetch and decompress ONLY the single micro-block with ID block_id."""

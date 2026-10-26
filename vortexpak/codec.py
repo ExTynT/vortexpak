@@ -34,7 +34,7 @@ import struct
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import lz4.frame
 import numpy as np
@@ -58,18 +58,31 @@ from .native import (
     native_vxlz_compress_blocks_parallel,
     native_vxlz_decompress,
 )
-from .bcn import BCN_BC1, BCN_BC5, BCN_BC7, BCN_BCX, decode_bcn, encode_bcn
+from .bcn import (
+    GPU_FORMAT_IDS,
+    BCN_BC1,
+    BCN_BC5,
+    BCN_BC7,
+    BCN_BCX,
+    decode_bcn,
+    encode_bcn,
+    gpu_level0,
+    mip_sources,
+)
 from .rdo import (
-    calculate_image_psnr,
     calculate_image_ssim,
     quantize_blend_rdo,
     quantize_glb_rdo,
     quantize_obj_rdo,
-    quantize_png_rdo,
     quantize_texture_array_rdo,
 )
 
 VXPK_MAGIC = b"VXPK\x01\x01"
+
+# Default quality floor for gpu="auto": color PSNR (RGB, alpha excluded) and
+# alpha PSNR a GPU-native format must reach, else the texture is stored
+# losslessly. A conservative product default, not a perceptual guarantee.
+GPU_MIN_PSNR_DB = 35.0
 
 # Upper sanity bound for the decompressed meta section (guards corrupt headers).
 _MAX_META_BYTES = 1 << 30
@@ -108,13 +121,20 @@ DICT_MAX_SAMPLES = 2000
 # VFS seek granularity: one random read decompresses at most ~this much.
 # Cold-read p99 budget fix: lanes/stipes cap block size instead of block count.
 TARGET_BLOCK_BYTES = 2 * 1024 * 1024
+# layout="stream": assets >= STREAM_ISOLATE_BYTES get their own block(s) and
+# smaller ones share ~STREAM_BLOCK_BYTES blocks, bounding the bytes decoded per
+# random read. Costs some ratio (cross-asset context); layout="compact" keeps it.
+STREAM_ISOLATE_BYTES = 64 * 1024
+STREAM_BLOCK_BYTES = 256 * 1024
 
 # Texture transform flags (VXTX)
 TX_RAW_DENSE = 0
 TX_ALPHA_STRIP = 1 << 0
 TX_ROW_RLE = 1 << 1
 TX_PLANAR_CHW = 1 << 2
-TX_BCN = 1 << 3  # payload is GPU block data (BC1/BC4/BC5), see vortexpak/bcn.py
+TX_BCN = 1 << 3  # payload is GPU block data (BC1/BC4/BC5/BC7/BCX), see vortexpak/bcn.py
+TX_MIPS = 1 << 4  # TX_BCN payload holds a full mip chain (bcn.mip_dims), largest first
+TX_SRGB = 1 << 5  # TX_BCN color texture: sample as sRGB (DXGI *_UNORM_SRGB)
 
 
 @dataclass
@@ -604,11 +624,20 @@ def _encode_texture_vxtx(
 
     if rdo_level != "none" and num_samples > 0:
         diff = np.abs(orig_full.astype(np.int32) - full_arr.astype(np.int32))
+        max_abs_err = int(np.max(diff))  # all channels, alpha included
+        # PSNR/SSIM over color only, so unchanged alpha cannot inflate them.
+        if orig_full.ndim == 3 and orig_full.shape[2] in (2, 4):
+            n_color = orig_full.shape[2] - 1
+            diff = diff[..., :n_color]
+            ssim = calculate_image_ssim(
+                orig_full[..., :n_color], full_arr[..., :n_color]
+            )
+        else:
+            ssim = calculate_image_ssim(orig_full, full_arr)
+        num_samples = int(diff.size)
         sse = float(np.sum(diff.astype(np.float64) ** 2))
-        max_abs_err = int(np.max(diff))
         mse = sse / num_samples
         psnr = 10.0 * math.log10((255.0**2) / mse) if mse > 1e-12 else 100.0
-        ssim = calculate_image_ssim(orig_full, full_arr)
 
     # 3. Consecutive Row-RLE using AVX2 SIMD
     if arr.nbytes >= 65536 and arr.shape[0] > 4:
@@ -682,7 +711,7 @@ def _decode_texture_vxtx(
     if flags & TX_BCN:
         from .bcn import decode_bcn
 
-        fmt = {"BC1": 1, "BC4": 4, "BC5": 5, "BC7": 7}.get(tx_mode)
+        fmt = GPU_FORMAT_IDS.get(tx_mode)
         if fmt is None:
             channels = orig_shape[2] if len(orig_shape) > 2 else 1
             fmt = {4: 1, 2: 5, 1: 4}.get(channels)
@@ -690,7 +719,10 @@ def _decode_texture_vxtx(
             raise VXPKError(f"unsupported GPU tensor shape {orig_shape}")
         if not materialize_full_rgba:
             return np.frombuffer(payload, dtype=np.uint8)
-        rgba = decode_bcn(bytes(payload), orig_shape[1], orig_shape[0], fmt)
+        level0 = gpu_level0(
+            bytes(payload), orig_shape[1], orig_shape[0], fmt, bool(flags & TX_MIPS)
+        )
+        rgba = decode_bcn(level0, orig_shape[1], orig_shape[0], fmt)
         return np.frombuffer(rgba, dtype=np.uint8).reshape(orig_shape)
 
     if materialize_full_rgba and IS_NATIVE_AVAILABLE:
@@ -739,58 +771,110 @@ def _decode_texture_vxtx(
     return arr
 
 
-def _encode_texture_gpu(
-    png_bytes: bytes, gpu_format: str
-) -> Optional[Tuple[int, Tuple[int, ...], str, bytes, np.ndarray, float, float]]:
-    """VXTX-GPU path: PNG -> RGBA -> proprietary BC1/BC5 block payload.
+def _texture_quality(src: np.ndarray, dec: np.ndarray) -> Dict[str, Any]:
+    """Color fidelity (RGB, or RG for 2-channel BC5) and alpha fidelity, kept
+    separate so unchanged opaque alpha can never inflate the color PSNR.
+    A PSNR of None means bit-exact."""
+    color = 3 if src.shape[2] == 4 else src.shape[2]
+    diff = src[..., :color].astype(np.int64) - dec[..., :color].astype(np.int64)
+    sse = int(np.sum(diff * diff))
+    quality: Dict[str, Any] = {
+        "color_sse": sse,
+        "color_samples": int(diff.size),
+        "color_psnr_db": (
+            10.0 * math.log10(255.0**2 * diff.size / sse) if sse else None
+        ),
+        "color_max_abs_error": int(np.abs(diff).max()),
+        "alpha_exact": True,
+        "alpha_psnr_db": None,
+    }
+    if src.shape[2] == 4:
+        a = src[..., 3].astype(np.int64) - dec[..., 3].astype(np.int64)
+        a_sse = int(np.sum(a * a))
+        quality["alpha_exact"] = a_sse == 0
+        if a_sse:
+            quality["alpha_psnr_db"] = 10.0 * math.log10(255.0**2 * a.size / a_sse)
+    return quality
 
-    Returns (flags, tx_shape, tx_mode, payload, decoded_tensor, ratio, psnr_db)
-    or None when the asset cannot use the GPU path (caller falls back to the
-    lossless VXTX tensor pipeline)."""
+
+def _meets_floor(quality: Dict[str, Any], opaque: bool, floor_db: float) -> bool:
+    color = quality["color_psnr_db"]
+    if color is not None and color < floor_db:
+        return False
+    if opaque:
+        return bool(quality["alpha_exact"])
+    alpha = quality["alpha_psnr_db"]
+    return alpha is None or alpha >= floor_db
+
+
+def _encode_texture_gpu(
+    png_bytes: bytes,
+    gpu_format: str,
+    min_psnr_db: float = GPU_MIN_PSNR_DB,
+    mips: bool = True,
+) -> Union[Tuple[int, Tuple[int, ...], str, bytes, np.ndarray, float, dict], str]:
+    """VXTX-GPU path: PNG -> RGBA -> BC1/BC5/BC7/BCX block payload.
+
+    An explicit format is always used. "auto" tries GPU-native formats
+    cheapest first (BC1 4 bpp, then BC7 8 bpp) and takes the first whose color
+    and alpha PSNR on level 0 (the authored resolution) reach min_psnr_db;
+    opaque sources must stay exactly opaque. "auto" never ships a level 0 below
+    the floor: it returns "below_floor" and the caller stores the texture
+    losslessly. "ineligible" means the asset cannot use the GPU path at all
+    (undecodable, or not a multiple of 4).
+
+    With mips, GPU-native payloads (not BCX) carry the mip chain, box filtered
+    from the source (in linear light for sRGB color). Small mips are not held
+    to the floor: a single 4x4 block cannot represent a 2-D color gradient in
+    any one-subset BC mode, and such levels only cover a few screen pixels.
+    Their worst color PSNR is reported as "mip_min_color_psnr_db". Color
+    formats (BC1/BC7/BCX) are tagged sRGB. Reported quality is level 0's.
+
+    Returns (flags, tx_shape, tx_mode, payload, decoded_tensor, ratio, quality)."""
     try:
         img = Image.open(io.BytesIO(png_bytes))
         arr = np.array(img.convert("RGBA"), dtype=np.uint8)
     except Exception:
-        return None
+        return "ineligible"
     if arr.ndim != 3 or arr.shape[0] % 4 or arr.shape[1] % 4 or arr.shape[0] == 0:
-        return None
+        return "ineligible"
     h, w = int(arr.shape[0]), int(arr.shape[1])
     fmt_map = {"bc1": BCN_BC1, "bc5": BCN_BC5, "bc7": BCN_BC7, "bcx": BCN_BCX}
     if gpu_format == "auto":
-        # Only GPU-native formats: BC7 (8bpp) for alpha, BC1 (4bpp) for opaque.
-        # BCX is a storage format (needs a load-time decode) and is opt-in only.
-        candidates = ["bc7", "bc1"] if (arr[..., 3] < 255).any() else ["bc1"]
+        # GPU-native only; BCX is a storage format (needs a load-time decode).
+        candidates = ["bc1", "bc7"]
     elif gpu_format in fmt_map:
         candidates = [gpu_format]
     else:
-        return None
-    best = None
+        return "ineligible"
+    opaque = bool((arr[..., 3] == 255).all())
     for cand in candidates:
         fmt = fmt_map[cand]
-        if fmt == BCN_BC5:
-            src, channels = arr[..., :2].tobytes(), 2
-        else:
-            src, channels = arr.tobytes(), 4
-        blocks = encode_bcn(src, w, h, fmt)
-        dec = np.frombuffer(decode_bcn(blocks, w, h, fmt), dtype=np.uint8).reshape(
-            h, w, channels
-        )
-        psnr = calculate_image_psnr(src, dec.tobytes())
-        ratio = len(src) / max(len(blocks), 1)
-        if best is None or psnr > best[0]:
-            best = (
-                psnr,
-                TX_BCN,
-                (h, w, channels),
-                cand.upper(),
-                blocks,
-                dec,
-                round(ratio, 2),
-            )
-    if best is None:
-        return None
-    psnr, flags, shape, tx_mode, blocks, dec, ratio = best
-    return (flags, shape, tx_mode, blocks, dec, ratio, round(psnr, 2))
+        src = np.ascontiguousarray(arr[..., :2] if fmt == BCN_BC5 else arr)
+        channels = src.shape[2]
+        srgb = fmt in (BCN_BC1, BCN_BC7, BCN_BCX)
+        levels = [src]
+        if mips and fmt != BCN_BCX:
+            levels += mip_sources(src, srgb)
+        blocks = encode_bcn(src.tobytes(), w, h, fmt)
+        dec = np.frombuffer(decode_bcn(blocks, w, h, fmt), dtype=np.uint8)
+        dec = dec.reshape(h, w, channels)
+        quality = _texture_quality(src, dec)
+        if gpu_format == "auto" and not _meets_floor(quality, opaque, min_psnr_db):
+            continue
+        parts, mip_psnr = [blocks], []
+        for level in levels[1:]:
+            lh, lw = level.shape[0], level.shape[1]
+            lb = encode_bcn(level.tobytes(), lw, lh, fmt)
+            ld = np.frombuffer(decode_bcn(lb, lw, lh, fmt), dtype=np.uint8)
+            mip_psnr.append(_texture_quality(level, ld.reshape(lh, lw, channels))["color_psnr_db"])
+            parts.append(lb)
+        finite = [p for p in mip_psnr if p is not None]
+        quality["mip_min_color_psnr_db"] = min(finite) if finite else None
+        flags = TX_BCN | (TX_SRGB if srgb else 0) | (TX_MIPS if len(parts) > 1 else 0)
+        ratio = round(src.nbytes / max(len(blocks), 1), 2)
+        return (flags, (h, w, channels), cand.upper(), b"".join(parts), dec, ratio, quality)
+    return "below_floor"
 
 
 def _apply_lane_dictionaries(
@@ -884,47 +968,70 @@ def _split_into_parallel_buffers(
     num_chunks: int,
     lane_prefix: str,
     start_block_id: int,
+    isolate_bytes: Optional[int] = None,
+    block_bytes: int = TARGET_BLOCK_BYTES,
 ) -> Tuple[List[Tuple[int, str, bytes]], int]:
-    """Pack a list of (AssetEntry, payload) into balanced parallel micro-block buffers."""
-    if not items:
-        return [], start_block_id
+    """Pack (AssetEntry, payload) pairs into balanced parallel micro-blocks.
 
-    total_len = sum(len(b) for _, b in items)
-    actual_chunks = min(num_chunks, len(items)) if total_len >= 524288 else 1
-    actual_chunks = min(
-        len(items),
-        max(actual_chunks, -(-total_len // TARGET_BLOCK_BYTES)),
-    )
-    bin_entries: List[List[Tuple[AssetEntry, bytes]]] = [
-        [] for _ in range(actual_chunks)
-    ]
-    bin_sizes = [0] * actual_chunks
-
-    target_per_chunk = max(1, total_len // actual_chunks)
-    cur_bin = 0
-    for entry, blob in items:
-        if (
-            cur_bin < actual_chunks - 1
-            and bin_sizes[cur_bin] >= target_per_chunk
-            and bin_sizes[cur_bin] > 0
-        ):
-            cur_bin += 1
-        bin_entries[cur_bin].append((entry, blob))
-        bin_sizes[cur_bin] += len(blob)
-
+    With isolate_bytes, every payload of at least that size gets its own
+    block(s), striped above TARGET_BLOCK_BYTES, so reading a small asset never
+    decodes unrelated bulk; the rest share balanced blocks of ~block_bytes."""
+    big: List[Tuple[AssetEntry, bytes]] = []
+    if isolate_bytes is not None:
+        big = [it for it in items if len(it[1]) >= isolate_bytes]
+        items = [it for it in items if len(it[1]) < isolate_bytes]
     raw_blocks: List[Tuple[int, str, bytes]] = []
     bid = start_block_id
-    for b_idx in range(actual_chunks):
-        if not bin_entries[b_idx]:
-            continue
-        buf = bytearray()
-        for entry, blob in bin_entries[b_idx]:
-            entry.block_id = bid
-            entry.offset_in_block = len(buf)
-            entry.length_in_block = len(blob)
-            buf.extend(blob)
-        raw_blocks.append((bid, f"{lane_prefix}_{b_idx}", bytes(buf)))
-        bid += 1
+
+    if items:
+        total_len = sum(len(b) for _, b in items)
+        actual_chunks = min(num_chunks, len(items)) if total_len >= 524288 else 1
+        actual_chunks = min(
+            len(items),
+            max(actual_chunks, -(-total_len // block_bytes)),
+        )
+        bin_entries: List[List[Tuple[AssetEntry, bytes]]] = [
+            [] for _ in range(actual_chunks)
+        ]
+        bin_sizes = [0] * actual_chunks
+
+        target_per_chunk = max(1, total_len // actual_chunks)
+        cur_bin = 0
+        for entry, blob in items:
+            if (
+                cur_bin < actual_chunks - 1
+                and bin_sizes[cur_bin] >= target_per_chunk
+                and bin_sizes[cur_bin] > 0
+            ):
+                cur_bin += 1
+            bin_entries[cur_bin].append((entry, blob))
+            bin_sizes[cur_bin] += len(blob)
+
+        for b_idx in range(actual_chunks):
+            if not bin_entries[b_idx]:
+                continue
+            buf = bytearray()
+            for entry, blob in bin_entries[b_idx]:
+                entry.block_id = bid
+                entry.offset_in_block = len(buf)
+                entry.length_in_block = len(blob)
+                buf.extend(blob)
+            raw_blocks.append((bid, f"{lane_prefix}_{b_idx}", bytes(buf)))
+            bid += 1
+
+    for entry, blob in big:
+        n_parts = -(-len(blob) // TARGET_BLOCK_BYTES)
+        step = -(-len(blob) // n_parts)
+        spans: List[Tuple[int, int, int]] = []
+        for s_idx in range(n_parts):
+            part = blob[s_idx * step : (s_idx + 1) * step]
+            spans.append((bid, 0, len(part)))
+            raw_blocks.append((bid, f"{lane_prefix}_{bid - start_block_id}", part))
+            bid += 1
+        entry.block_id = spans[0][0]
+        entry.offset_in_block = 0
+        entry.length_in_block = len(blob)
+        entry.stripe_spans = spans if n_parts > 1 else []
 
     return raw_blocks, bid
 
@@ -942,9 +1049,20 @@ class VortexPakCodec:
         max_workers: int = 8,
         entropy_backend: str = "vxlz",
         gpu: str = "none",
+        gpu_min_psnr_db: float = GPU_MIN_PSNR_DB,
+        layout: str = "stream",
+        mips: bool = True,
     ):
+        if layout not in ("stream", "compact"):
+            raise ValueError("layout must be 'stream' or 'compact'")
         if mode not in ("strict", "engine"):
             raise ValueError("mode must be 'strict' or 'engine'")
+        if mode == "strict" and (rdo or gpu != "none"):
+            raise ValueError(
+                "strict mode is byte-exact; rdo and gpu require mode='engine'"
+            )
+        if not 0.0 < gpu_min_psnr_db <= 100.0:
+            raise ValueError("gpu_min_psnr_db must be in (0, 100]")
         if entropy_backend not in ("vxlz", "hybrid", "zstd"):
             raise ValueError("entropy_backend must be 'vxlz', 'hybrid', or 'zstd'")
         if gpu not in ("none", "bc1", "bc5", "bc7", "bcx", "auto"):
@@ -955,8 +1073,25 @@ class VortexPakCodec:
         self.max_workers = max_workers
         self.entropy_backend = entropy_backend
         self.gpu = gpu
+        self.gpu_min_psnr_db = gpu_min_psnr_db
+        self.layout = layout
+        self.mips = mips
         self._pool = ThreadPoolExecutor(max_workers=max_workers)
         self.last_rdo_metrics: Dict[str, Any] = {}
+
+    def _lane_split(
+        self, items: List[Tuple[AssetEntry, bytes]], n_chunks: int, prefix: str, bid: int
+    ) -> Tuple[List[Tuple[int, str, bytes]], int]:
+        if self.layout == "stream":
+            return _split_into_parallel_buffers(
+                items,
+                n_chunks,
+                prefix,
+                bid,
+                isolate_bytes=STREAM_ISOLATE_BYTES,
+                block_bytes=STREAM_BLOCK_BYTES,
+            )
+        return _split_into_parallel_buffers(items, n_chunks, prefix, bid)
 
     def get_rdo_metrics(self) -> Dict[str, Any]:
         return self.last_rdo_metrics
@@ -988,8 +1123,10 @@ class VortexPakCodec:
         total_pixel_raw_bytes = 0
         tex_psnrs: List[float] = []
         tex_ssims: List[float] = []
-        gpu_psnrs: List[float] = []
+        gpu_qualities: List[Dict[str, Any]] = []
         gpu_ratios: List[float] = []
+        gpu_formats: Dict[str, int] = {}
+        gpu_fallbacks = {"below_floor": 0, "ineligible": 0}
         geom_psnrs: List[float] = []
         total_tex_sse = 0.0
         total_tex_samples = 0
@@ -1004,6 +1141,28 @@ class VortexPakCodec:
                 x[0],
             ),
         )
+
+        # GPU block compression is per-texture independent: run it across the
+        # pool up front (native encode, Pillow and NumPy release the GIL), keep
+        # only what the archive needs, and consume results in input order.
+        gpu_results: Dict[str, Any] = {}
+        if self.mode == "engine" and self.gpu != "none":
+
+            def _gpu_job(item: Tuple[str, bytes]) -> Tuple[str, Any]:
+                rel, raw = item
+                res = _encode_texture_gpu(raw, self.gpu, self.gpu_min_psnr_db, self.mips)
+                if isinstance(res, str):
+                    return rel, res
+                flags, shape, mode, payload, dec, ratio, quality = res
+                digest = xxhash.xxh3_64_intdigest(dec)
+                return rel, (flags, shape, mode, payload, dec.nbytes, digest, ratio, quality)
+
+            images = [
+                item
+                for item in sorted_inputs
+                if Path(item[0]).suffix.lower() in (".png", ".tga", ".jpg", ".jpeg")
+            ]
+            gpu_results = dict(self._pool.map(_gpu_job, images))
 
         for rel_path, raw_bytes in sorted_inputs:
             ext = Path(rel_path).suffix.lower()
@@ -1025,26 +1184,30 @@ class VortexPakCodec:
                 and _image_ok
             ):
                 if self.gpu != "none":
-                    gpu_res = _encode_texture_gpu(raw_bytes, self.gpu)
-                    if gpu_res is not None:
+                    gpu_res = gpu_results[rel_path]
+                    if isinstance(gpu_res, str):
+                        gpu_fallbacks[gpu_res] += 1
+                    else:
                         (
                             g_flags,
                             g_shape,
                             g_mode,
                             g_payload,
-                            g_arr,
+                            g_nbytes,
+                            g_digest,
                             g_ratio,
-                            g_psnr,
+                            g_quality,
                         ) = gpu_res
-                        total_pixel_raw_bytes += g_arr.nbytes
-                        gpu_psnrs.append(g_psnr)
+                        total_pixel_raw_bytes += g_nbytes
+                        gpu_qualities.append(g_quality)
                         gpu_ratios.append(g_ratio)
+                        gpu_formats[g_mode] = gpu_formats.get(g_mode, 0) + 1
                         entries.append(
                             AssetEntry(
                                 rel_path=rel_path,
                                 ext=ext,
                                 raw_size=len(raw_bytes),
-                                xxh64=xxhash.xxh3_64_intdigest(g_arr),
+                                xxh64=g_digest,
                                 is_texture_tensor=True,
                                 tx_flags=g_flags,
                                 tx_shape=g_shape,
@@ -1093,11 +1256,7 @@ class VortexPakCodec:
 
             # Perceptual RDO for 3D model geometry and strict mode PNGs
             if self.rdo:
-                if ext == ".png" and self.mode == "strict":
-                    raw_bytes, psnr = quantize_png_rdo(raw_bytes, level=self.rdo_level)
-                    if psnr < 99.9:
-                        tex_psnrs.append(psnr)
-                elif ext == ".glb":
+                if ext == ".glb":
                     try:
                         raw_bytes, psnr = quantize_glb_rdo(raw_bytes, drop_bits=12)
                     except Exception:
@@ -1176,7 +1335,7 @@ class VortexPakCodec:
                 else:
                     small_textures.append((entry, payload))
             if small_textures:
-                rbs, next_bid = _split_into_parallel_buffers(
+                rbs, next_bid = self._lane_split(
                     small_textures, 32, "LANE_VXTX", next_bid
                 )
                 raw_blocks_to_compress.extend(rbs)
@@ -1184,7 +1343,7 @@ class VortexPakCodec:
         if lane_png_strict:
             # Sort strict PNGs by size so small palette PNGs cluster together
             lane_png_strict.sort(key=lambda x: len(x[1]))
-            rbs_p, next_bid = _split_into_parallel_buffers(
+            rbs_p, next_bid = self._lane_split(
                 lane_png_strict, 8, "LANE_PNG_STRICT", next_bid
             )
             raw_blocks_to_compress.extend(rbs_p)
@@ -1213,7 +1372,7 @@ class VortexPakCodec:
             (lane_media, "LANE_MEDIA", 4),
         ]:
             if lane_items:
-                rbs, next_bid = _split_into_parallel_buffers(
+                rbs, next_bid = self._lane_split(
                     lane_items, n_chk, lane_name, next_bid
                 )
                 raw_blocks_to_compress.extend(rbs)
@@ -1300,13 +1459,46 @@ class VortexPakCodec:
                 "quantized_assets_count": 0,
             }
 
-        if gpu_psnrs:
+        if self.mode == "engine" and self.gpu != "none":
+            sse = sum(q["color_sse"] for q in gpu_qualities)
+            samples = sum(q["color_samples"] for q in gpu_qualities)
+            finite = [
+                q["color_psnr_db"]
+                for q in gpu_qualities
+                if q["color_psnr_db"] is not None
+            ]
             self.last_rdo_metrics.update(
                 {
                     "gpu_format": self.gpu,
-                    "gpu_asset_count": len(gpu_psnrs),
-                    "gpu_avg_psnr_db": round(float(np.mean(gpu_psnrs)), 2),
-                    "gpu_avg_compression_ratio": round(float(np.mean(gpu_ratios)), 2),
+                    "gpu_min_psnr_db": (
+                        self.gpu_min_psnr_db if self.gpu == "auto" else None
+                    ),
+                    "gpu_asset_count": len(gpu_qualities),
+                    "gpu_formats": dict(sorted(gpu_formats.items())),
+                    "gpu_lossless_fallbacks": dict(gpu_fallbacks),
+                    # Pooled over all GPU-coded texels (not a mean of dB);
+                    # None = bit-exact. Alpha is reported separately.
+                    "gpu_color_psnr_db": (
+                        round(10.0 * math.log10(255.0**2 * samples / sse), 2)
+                        if sse
+                        else None
+                    ),
+                    "gpu_min_color_psnr_db": round(min(finite), 2) if finite else None,
+                    # Worst mip level (not floor-gated; see _encode_texture_gpu).
+                    "gpu_min_mip_color_psnr_db": min(
+                        (
+                            round(q["mip_min_color_psnr_db"], 2)
+                            for q in gpu_qualities
+                            if q.get("mip_min_color_psnr_db") is not None
+                        ),
+                        default=None,
+                    ),
+                    "gpu_alpha_exact_count": sum(
+                        q["alpha_exact"] for q in gpu_qualities
+                    ),
+                    "gpu_avg_compression_ratio": (
+                        round(float(np.mean(gpu_ratios)), 2) if gpu_ratios else None
+                    ),
                 }
             )
 

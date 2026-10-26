@@ -44,6 +44,16 @@
 
 #define STRAT_VXLZ 8
 
+/**
+ * TX_BCN payload holds a mip chain (see `mip_dims`), largest level first.
+ */
+#define TX_MIPS (1 << 4)
+
+/**
+ * TX_BCN color texture that should be sampled as sRGB.
+ */
+#define TX_SRGB (1 << 5)
+
 #define TX_RAW_DENSE 0
 
 #define TX_ALPHA_STRIP (1 << 0)
@@ -82,6 +92,31 @@ typedef struct CTextureDecodeDesc {
   uint32_t materialize_rgba;
   int32_t status;
 } CTextureDecodeDesc;
+
+/**
+ * GPU upload description of a block-compressed texture (see
+ * `vfs_get_texture_info_c`). Mip levels are stored largest first and
+ * concatenated in the payload from `vfs_read_asset_c(..., materialize_rgba = 0)`;
+ * level i is (width >> i) x (height >> i) texels, i.e.
+ * ((width >> i) / 4) * ((height >> i) / 4) blocks of `block_bytes` each.
+ */
+typedef struct CTextureInfo {
+  uint32_t width;
+  uint32_t height;
+  /**
+   * 1 = BC1, 4 = BC4, 5 = BC5, 7 = BC7, 11 = BCX (storage-only: read RGBA).
+   */
+  int32_t bcn_format;
+  /**
+   * 8 for BC1/BC4, 16 for BC5/BC7.
+   */
+  uint32_t block_bytes;
+  uint32_t mip_levels;
+  /**
+   * 1 = color texture to sample as sRGB (e.g. DXGI_FORMAT_BC7_UNORM_SRGB).
+   */
+  uint32_t srgb;
+} CTextureInfo;
 
 typedef struct CVxlzCompressDesc {
   const uint8_t *src_ptr;
@@ -175,6 +210,14 @@ int64_t vfs_read_asset_c(struct VortexVfs_File *handle,
                          int32_t materialize_rgba);
 
 uintptr_t vfs_get_assets_count_c(struct VortexVfs_File *handle);
+
+/**
+ * Fill `out` for a GPU texture. Returns 0 on success, -1 on bad arguments,
+ * -2 when the asset is missing or not a block-compressed texture.
+ */
+int32_t vfs_get_texture_info_c(struct VortexVfs_File *handle,
+                               const char *path_ptr,
+                               struct CTextureInfo *out);
 
 int64_t vxlz_compress_c(const uint8_t *src_ptr,
                         uintptr_t src_len,

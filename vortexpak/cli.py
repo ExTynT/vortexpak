@@ -17,7 +17,7 @@ from PIL import Image
 import time
 from pathlib import Path
 
-from .codec import VortexArchive, VortexPakCodec, VXPKError
+from .codec import VortexArchive, VortexPakCodec, VXPKError, GPU_MIN_PSNR_DB
 from .native import IS_NATIVE_AVAILABLE
 from .vfs import VortexVFS, benchmark_vfs_streaming
 
@@ -55,6 +55,26 @@ def main() -> None:
         default="none",
         help="VXTX-GPU block compression for engine-mode textures (BC1: 4:1, BC5: 2:1 for normal maps)",
     )
+    p_pack.add_argument(
+        "--layout",
+        choices=["stream", "compact"],
+        default="stream",
+        help="'stream' isolates large assets and keeps shared blocks small for predictable random reads; "
+        "'compact' maximizes cross-asset context for the smallest archive",
+    )
+    p_pack.add_argument(
+        "--no-mips",
+        action="store_true",
+        help="store GPU textures without a mip chain (UI / pixel-art sprites); "
+        "by default BC1/BC4/BC5/BC7 textures carry full mips for engine upload",
+    )
+    p_pack.add_argument(
+        "--gpu-min-psnr",
+        type=float,
+        default=GPU_MIN_PSNR_DB,
+        help="--gpu auto only: minimum color and alpha PSNR (dB) a GPU format must reach; "
+        "otherwise the texture is stored losslessly (default: %(default)s)",
+    )
 
     # 2. Info
     p_info = sub.add_parser(
@@ -70,6 +90,11 @@ def main() -> None:
     p_ext.add_argument("archive_file", type=Path, help="Input .vpak file")
     p_ext.add_argument(
         "asset_path", type=str, help="Relative path of the asset inside the archive"
+    )
+    p_ext.add_argument(
+        "--dds",
+        action="store_true",
+        help="write a GPU texture as a DDS file (DX10 header, full mip chain, sRGB-tagged) to --output",
     )
     p_ext.add_argument(
         "-o",
@@ -105,11 +130,16 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.cmd == "pack":
+        if args.mode == "strict" and (args.rdo or args.gpu != "none"):
+            parser.error("--mode strict is byte-exact; --rdo and --gpu require --mode engine")
         codec = VortexPakCodec(
             mode=args.mode,
             rdo=args.rdo,
             rdo_level=args.rdo_level,
             gpu=args.gpu,
+            gpu_min_psnr_db=args.gpu_min_psnr,
+            layout=args.layout,
+            mips=not args.no_mips,
         )
         t0 = time.perf_counter()
         arch = codec.encode_directory(args.input_dir)
@@ -169,7 +199,21 @@ def main() -> None:
             print(
                 f"[VFS On-Demand] Streamed '{args.asset_path}' ({len(data):,d} B) in {t_ms:.2f} ms without full archive decompression!"  # noqa: E501
             )
-            if args.output:
+            if args.dds:
+                if not args.output:
+                    parser.error("--dds requires --output")
+                try:
+                    dds = vfs.read_dds(args.asset_path)
+                except ValueError as exc:
+                    parser.error(str(exc))
+                args.output.parent.mkdir(parents=True, exist_ok=True)
+                args.output.write_bytes(dds)
+                info = vfs.texture_info(args.asset_path)
+                print(
+                    f"Saved DDS {info['format']}{'_SRGB' if info['srgb'] else ''} "
+                    f"{info['width']}x{info['height']}, {len(info['levels'])} mip level(s) to {args.output}"
+                )
+            elif args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 if (
                     vfs.stat(args.asset_path)["is_texture_tensor"]

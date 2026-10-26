@@ -76,3 +76,14 @@ jobs:
           cargo build --release --manifest-path vortexpak_native/Cargo.toml
           gcc -std=c11 -I vortexpak_native examples/c/consumer.c -o consumer -L vortexpak_native/target/release -lvortexpak_native -Wl,-rpath,'$ORIGIN/vortexpak_native/target/release'
           ./consumer
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Engine loader reads a mip-mapped texture through the C-ABI
+        run: |
+          pip install -e .
+          python -c "import numpy as np, pathlib; from PIL import Image; d = pathlib.Path('demo/textures'); d.mkdir(parents=True); y, x = np.mgrid[0:64, 0:64]; Image.fromarray(np.dstack([x * 4, y * 4, 255 - x * 2, np.full_like(x, 255)]).astype(np.uint8)).save(d / 't0.png')"
+          python -m vortexpak.cli pack demo demo.vpak --gpu bc7
+          gcc -std=c11 -Wall -Werror -I vortexpak_native examples/engine_loader/engine_loader.c -o engine_loader -L vortexpak_native/target/release -lvortexpak_native -Wl,-rpath,'$ORIGIN/vortexpak_native/target/release'
+          ./engine_loader demo.vpak textures/t0.png | tee loader.log
+          grep -q "BC7_SRGB 64x64, 5 mip level(s)" loader.log

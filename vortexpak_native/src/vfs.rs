@@ -67,21 +67,87 @@ impl VortexVfs<File> {
 
 /// Texture tensor flag: payload is GPU block data (see docs/FORMAT.md).
 const TX_BCN: u32 = 1 << 3;
+/// TX_BCN payload holds a mip chain (see `mip_dims`), largest level first.
+pub const TX_MIPS: u32 = 1 << 4;
+/// TX_BCN color texture that should be sampled as sRGB.
+pub const TX_SRGB: u32 = 1 << 5;
 
-fn decode_bcn_entry(entry: &VfsAssetEntry, payload: &[u8]) -> Result<Vec<u8>, String> {
-    let (h, w) = match entry.tx_shape.as_slice() {
-        [h, w, ..] => (*h, *w),
-        _ => return Err("BCN entry without a (h, w, c) shape".into()),
-    };
-    let fmt = match entry.tx_mode.as_str() {
+/// Stored mip level sizes for a w x h texture: halve while the next level is
+/// still a whole number of 4x4 blocks. Level 0 is always included.
+pub fn mip_dims(mut w: usize, mut h: usize) -> Vec<(usize, usize)> {
+    let mut dims = vec![(w, h)];
+    while w % 8 == 0 && h % 8 == 0 && w > 0 && h > 0 {
+        w /= 2;
+        h /= 2;
+        dims.push((w, h));
+    }
+    dims
+}
+
+fn block_bytes(fmt: i32) -> usize {
+    if fmt == crate::bcn::BCN_BC1 || fmt == crate::bcn::BCN_BC4 {
+        8
+    } else {
+        16
+    }
+}
+
+fn bcn_format(mode: &str) -> Result<i32, String> {
+    Ok(match mode {
         "BC1" => crate::bcn::BCN_BC1,
         "BC4" => crate::bcn::BCN_BC4,
         "BC5" => crate::bcn::BCN_BC5,
         "BC7" => crate::bcn::BCN_BC7,
         "BCX" => crate::bcn::BCN_BCX,
         other => return Err(format!("unknown BCN tx_mode {other:?}")),
+    })
+}
+
+/// GPU upload description of a block-compressed texture entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextureInfo {
+    pub width: usize,
+    pub height: usize,
+    pub bcn_format: i32,
+    pub mip_levels: usize,
+    pub srgb: bool,
+}
+
+fn texture_info_of(entry: &VfsAssetEntry) -> Result<TextureInfo, String> {
+    let (h, w) = match entry.tx_shape.as_slice() {
+        [h, w, ..] => (*h, *w),
+        _ => return Err("BCN entry without a (h, w, c) shape".into()),
     };
-    crate::bcn::bcn_decode(fmt, payload, w, h)
+    let fmt = bcn_format(&entry.tx_mode)?;
+    let mips = entry.tx_flags & TX_MIPS != 0 && fmt != crate::bcn::BCN_BCX;
+    Ok(TextureInfo {
+        width: w,
+        height: h,
+        bcn_format: fmt,
+        mip_levels: if mips { mip_dims(w, h).len() } else { 1 },
+        srgb: entry.tx_flags & TX_SRGB != 0,
+    })
+}
+
+fn decode_bcn_entry(entry: &VfsAssetEntry, payload: &[u8]) -> Result<Vec<u8>, String> {
+    let info = texture_info_of(entry)?;
+    let (w, h, fmt) = (info.width, info.height, info.bcn_format);
+    let mut level0 = payload;
+    if info.mip_levels > 1 {
+        let sizes: Vec<usize> = mip_dims(w, h)
+            .iter()
+            .map(|&(lw, lh)| (lw / 4) * (lh / 4) * block_bytes(fmt))
+            .collect();
+        if payload.len() != sizes.iter().sum::<usize>() {
+            return Err(format!(
+                "mip chain is {} B, expected {} B",
+                payload.len(),
+                sizes.iter().sum::<usize>()
+            ));
+        }
+        level0 = &payload[..sizes[0]];
+    }
+    crate::bcn::bcn_decode(fmt, level0, w, h)
 }
 
 impl<R: Read + Seek> VortexVfs<R> {
@@ -447,6 +513,17 @@ impl<R: Read + Seek> VortexVfs<R> {
     }
 
     /// List all asset paths in the archive.
+    /// Format, size, mip count and color space of a GPU texture entry;
+    /// None when the asset is missing or not block-compressed.
+    pub fn texture_info(&self, rel_path: &str) -> Option<TextureInfo> {
+        let idx = *self.path_index.get(&rel_path.replace('\\', "/"))?;
+        let entry = &self.entries[idx];
+        if !entry.is_texture_tensor || entry.tx_flags & TX_BCN == 0 {
+            return None;
+        }
+        texture_info_of(entry).ok()
+    }
+
     pub fn list_assets(&self) -> Vec<&str> {
         self.entries.iter().map(|e| e.rel_path.as_str()).collect()
     }
@@ -460,4 +537,46 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
         .step_by(2)
         .map(|i| u8::from_str_radix(&s[i..i + 2], 16).map_err(|e| e.to_string()))
         .collect()
+}
+
+#[cfg(test)]
+mod mip_tests {
+    use super::*;
+
+    #[test]
+    fn mip_dims_stop_at_block_granularity() {
+        assert_eq!(mip_dims(64, 32), vec![(64, 32), (32, 16), (16, 8), (8, 4)]);
+        assert_eq!(mip_dims(12, 12), vec![(12, 12)]);
+        assert_eq!(*mip_dims(512, 512).last().unwrap(), (4, 4));
+    }
+
+    #[test]
+    fn decode_uses_level0_and_validates_chain() {
+        let w = 16;
+        let rgba: Vec<u8> = (0..w * w * 4).map(|i| (i * 7 % 251) as u8).collect();
+        let l0 = crate::bcn::bcn_encode(crate::bcn::BCN_BC1, &rgba, w, w).unwrap();
+        let mut chain = l0.clone();
+        chain.extend(vec![0u8; 8 * (4 + 1)]); // levels 8x8 (4 blocks) + 4x4 (1 block)
+        let entry = VfsAssetEntry {
+            rel_path: "t.png".into(),
+            raw_size: 0,
+            is_texture_tensor: true,
+            tx_flags: TX_BCN | TX_MIPS | TX_SRGB,
+            tx_shape: vec![w, w, 4],
+            tx_mode: "BC1".into(),
+            tx_rle_unique_rows: 0,
+            block_id: 0,
+            offset_in_block: 0,
+            length_in_block: chain.len(),
+            aux_block_id: -1,
+            aux_offset: 0,
+            aux_length: 0,
+            stripe_spans: vec![],
+        };
+        let expect = crate::bcn::bcn_decode(crate::bcn::BCN_BC1, &l0, w, w).unwrap();
+        assert_eq!(decode_bcn_entry(&entry, &chain).unwrap(), expect);
+        assert!(decode_bcn_entry(&entry, &chain[..chain.len() - 1]).is_err());
+        let info = texture_info_of(&entry).unwrap();
+        assert_eq!((info.mip_levels, info.srgb), (3, true));
+    }
 }

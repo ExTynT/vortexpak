@@ -10,12 +10,16 @@ recompression:
   BC1: 8 B per 4x4 block  (RGB, 1-bit alpha via 3-color+black mode)
   BC4: 8 B per 4x4 block  (single channel)
   BC5: 16 B per 4x4 block (two BC4 planes, plane-major RG)
+
+Stored GPU textures may carry a mip chain: levels 0..n-1 concatenated,
+largest first, each a whole number of 4x4 blocks (see mip_dims).
 """
 
 from __future__ import annotations
 
 import ctypes
 import struct
+from typing import List, Tuple
 
 import numpy as np
 
@@ -498,26 +502,33 @@ def _encode_bc7_np(src: bytes, w: int, h: int) -> bytes:
         for bx in range(w // 4):
             blk = arr[by * 4 : by * 4 + 4, bx * 4 : bx * 4 + 4].reshape(16, 4)
             best = None
-            for pa in (0, 1):
-                for pb in (0, 1):
-                    q0 = (
-                        np.clip(np.round((blk.min(0) - pa) / 2), 0, 127).astype(
-                            np.int64
-                        )
-                        * 2
-                        + pa
+            # Shared RGBA P-bit: opaque blocks need P=1 (alpha 255), fully
+            # transparent ones P=0 (alpha 0); mirrors the native encoder.
+            if blk[:, 3].min() == 255:
+                pbits = [(1, 1)]
+            elif blk[:, 3].max() == 0:
+                pbits = [(0, 0)]
+            else:
+                pbits = [(0, 0), (0, 1), (1, 0), (1, 1)]
+            for pa, pb in pbits:
+                q0 = (
+                    np.clip(np.round((blk.min(0) - pa) / 2), 0, 127).astype(
+                        np.int64
                     )
-                    q1 = (
-                        np.clip(np.round((blk.max(0) - pb) / 2), 0, 127).astype(
-                            np.int64
-                        )
-                        * 2
-                        + pb
+                    * 2
+                    + pa
+                )
+                q1 = (
+                    np.clip(np.round((blk.max(0) - pb) / 2), 0, 127).astype(
+                        np.int64
                     )
-                    d = ((blk[:, None, :] - _bc7_palette(q0, q1)[None]) ** 2).sum(-1)
-                    err = int(d.min(1).sum())
-                    if best is None or err < best[0]:
-                        best = (err, q0, q1, d.argmin(1))
+                    * 2
+                    + pb
+                )
+                d = ((blk[:, None, :] - _bc7_palette(q0, q1)[None]) ** 2).sum(-1)
+                err = int(d.min(1).sum())
+                if best is None or err < best[0]:
+                    best = (err, q0, q1, d.argmin(1))
             assert best is not None
             _, q0, q1, idx = best
             if idx[0] >= 8:  # anchor rule: pixel 0 index MSB must be 0
@@ -644,3 +655,126 @@ def _fallback_decode(blocks: bytes, w: int, h: int, fmt: int) -> bytes:
     out[..., 0] = r.reshape(h, w)
     out[..., 1] = g.reshape(h, w)
     return out.tobytes()
+
+
+# ---------------------------------------------------------------------------
+# Mip chains and DDS export (engine interop)
+# ---------------------------------------------------------------------------
+
+# DXGI formats (UNORM, UNORM_SRGB) for the GPU-native block formats.
+DXGI_FORMATS = {BCN_BC1: (71, 72), BCN_BC4: (80, 80), BCN_BC5: (83, 83), BCN_BC7: (98, 99)}
+
+
+def mip_dims(w: int, h: int) -> List[Tuple[int, int]]:
+    """Mip level sizes stored for a w x h texture: halve while the next level
+    stays a whole number of 4x4 blocks. Level 0 is always included."""
+    dims = [(w, h)]
+    while w % 8 == 0 and h % 8 == 0:
+        w, h = w // 2, h // 2
+        dims.append((w, h))
+    return dims
+
+
+def level_bytes(w: int, h: int, fmt: int) -> int:
+    return (w // 4) * (h // 4) * GPU_BLOCK_BYTES[fmt]
+
+
+def chain_bytes(w: int, h: int, fmt: int, levels: int) -> int:
+    return sum(level_bytes(lw, lh, fmt) for lw, lh in mip_dims(w, h)[:levels])
+
+
+def gpu_level0(payload: bytes, w: int, h: int, fmt: int, has_mips: bool) -> bytes:
+    """Level-0 blocks of a stored GPU payload; validates the full chain length."""
+    if not has_mips or fmt == BCN_BCX:
+        return payload
+    expected = chain_bytes(w, h, fmt, len(mip_dims(w, h)))
+    if len(payload) != expected:
+        raise ValueError(f"mip chain is {len(payload)} B, expected {expected} B for {w}x{h}")
+    return payload[: level_bytes(w, h, fmt)]
+
+
+_SRGB_TO_LINEAR = np.where(
+    np.arange(256) / 255.0 <= 0.04045,
+    np.arange(256) / 255.0 / 12.92,
+    ((np.arange(256) / 255.0 + 0.055) / 1.055) ** 2.4,
+)
+# Linear-light values (x255) of the sRGB code midpoints k + 0.5: a linear value
+# rounds to sRGB code k exactly when it lies between midpoints k - 1 and k.
+_SRGB_LINEAR_255 = (_SRGB_TO_LINEAR * 255.0).astype(np.float32)
+_mid = (np.arange(255) + 0.5) / 255.0
+_SRGB_MIDPOINTS_255 = (
+    np.where(_mid <= 0.04045, _mid / 12.92, ((_mid + 0.055) / 1.055) ** 2.4) * 255.0
+).astype(np.float32)
+# Bucketed exact lookup: buckets of 1/16 are narrower than the smallest gap
+# between midpoints (0.077), so each holds at most one; the code of x is the
+# midpoint count at the bucket start plus one comparison.
+_BUCKETS = 16
+_bucket_start = np.arange(255 * _BUCKETS + 1, dtype=np.float64) / _BUCKETS
+_BUCKET_BASE = np.searchsorted(
+    _SRGB_MIDPOINTS_255.astype(np.float64), _bucket_start, side="right"
+).astype(np.uint8)
+_BUCKET_NEXT = np.append(_SRGB_MIDPOINTS_255, np.float32(np.inf))[_BUCKET_BASE.astype(np.int64)]
+
+
+def _to_linear(arr: np.ndarray, srgb: bool) -> np.ndarray:
+    """uint8 texels -> float32 in [0, 255]; sRGB color channels in linear light."""
+    x = arr.astype(np.float32)
+    if srgb and arr.shape[2] >= 3:
+        x[..., :3] = _SRGB_LINEAR_255[arr[..., :3]]
+    return x
+
+
+def _to_uint8(x: np.ndarray, srgb: bool) -> np.ndarray:
+    out = np.empty(x.shape, dtype=np.uint8)
+    if srgb and x.shape[2] >= 3:
+        c = x[..., :3]
+        idx = np.minimum((c * _BUCKETS).astype(np.int32), 255 * _BUCKETS)
+        out[..., :3] = _BUCKET_BASE[idx] + (c >= _BUCKET_NEXT[idx])
+        out[..., 3:] = np.clip(np.rint(x[..., 3:]), 0, 255)
+    else:
+        out[:] = np.clip(np.rint(x), 0, 255)
+    return out
+
+
+def _half(x: np.ndarray) -> np.ndarray:
+    return (x[0::2, 0::2] + x[1::2, 0::2] + x[0::2, 1::2] + x[1::2, 1::2]) * np.float32(0.25)
+
+
+def downsample_2x(arr: np.ndarray, srgb: bool) -> np.ndarray:
+    """2x2 box filter. With srgb, color channels are averaged in linear light;
+    alpha and non-color data (BC4/BC5 sources) are averaged as stored."""
+    return _to_uint8(_half(_to_linear(arr, srgb)), srgb)
+
+
+def mip_sources(src: np.ndarray, srgb: bool) -> List[np.ndarray]:
+    """Source pixels of mip levels 1..n (see mip_dims): level i is the box
+    average of the corresponding 2^i x 2^i source texels (linear light for
+    sRGB color), computed in float and rounded once, never from decoded
+    blocks or from rounded intermediate levels."""
+    h, w = src.shape[0], src.shape[1]
+    x, out = _to_linear(src, srgb), []
+    for _ in mip_dims(w, h)[1:]:
+        x = _half(x)
+        out.append(_to_uint8(x, srgb))
+    return out
+
+
+def to_dds(payload: bytes, w: int, h: int, fmt: int, levels: int, srgb: bool) -> bytes:
+    """Wrap a stored GPU payload in a DDS (DX10 header) container that D3D,
+    Vulkan/GL tooling, texconv, RenderDoc and engine importers read directly."""
+    if fmt not in DXGI_FORMATS:
+        raise ValueError("only GPU-native BC1/BC4/BC5/BC7 payloads have a DDS form")
+    if len(payload) != chain_bytes(w, h, fmt, levels):
+        raise ValueError("payload size does not match the declared mip chain")
+    flags = 0x1 | 0x2 | 0x4 | 0x1000 | 0x80000 | (0x20000 if levels > 1 else 0)
+    caps = 0x1000 | ((0x8 | 0x400000) if levels > 1 else 0)
+    dxgi = DXGI_FORMATS[fmt][1 if srgb else 0]
+    header = (
+        struct.pack("<4sI", b"DDS ", 124)
+        + struct.pack("<IIIIII", flags, h, w, level_bytes(w, h, fmt), 0, levels)
+        + bytes(44)
+        + struct.pack("<II4sIIIII", 32, 0x4, b"DX10", 0, 0, 0, 0, 0)
+        + struct.pack("<IIIII", caps, 0, 0, 0, 0)
+        + struct.pack("<IIIII", dxgi, 3, 0, 1, 0)
+    )
+    return header + payload

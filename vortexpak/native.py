@@ -667,7 +667,7 @@ def native_decode_archive_parallel(
     for e in entries:
         if e.is_texture_tensor:
             if e.tx_flags & 8:  # TX_BCN: VXTX-GPU assets decode via Python bridge
-                from .bcn import GPU_FORMAT_IDS, decode_bcn
+                from .bcn import GPU_FORMAT_IDS, decode_bcn, gpu_level0
 
                 fmt = GPU_FORMAT_IDS.get(e.tx_mode)
                 if fmt is None:
@@ -681,7 +681,10 @@ def native_decode_archive_parallel(
                     src_start = block_offsets[e.block_id] + e.offset_in_block
                     payload = bytes(mv_big[src_start : src_start + e.length_in_block])
                 if materialize_full_rgba:
-                    rgba = decode_bcn(payload, e.tx_shape[1], e.tx_shape[0], fmt)
+                    level0 = gpu_level0(
+                        payload, e.tx_shape[1], e.tx_shape[0], fmt, bool(e.tx_flags & 16)
+                    )
+                    rgba = decode_bcn(level0, e.tx_shape[1], e.tx_shape[0], fmt)
                     results[e.rel_path] = np.frombuffer(rgba, dtype=np.uint8).reshape(
                         e.tx_shape
                     )

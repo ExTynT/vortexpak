@@ -465,6 +465,61 @@ pub unsafe extern "C" fn vfs_get_assets_count_c(handle: *mut VortexVfs<std::fs::
     vfs.entries.len()
 }
 
+/// GPU upload description of a block-compressed texture (see
+/// `vfs_get_texture_info_c`). Mip levels are stored largest first and
+/// concatenated in the payload from `vfs_read_asset_c(..., materialize_rgba = 0)`;
+/// level i is (width >> i) x (height >> i) texels, i.e.
+/// ((width >> i) / 4) * ((height >> i) / 4) blocks of `block_bytes` each.
+#[repr(C)]
+pub struct CTextureInfo {
+    pub width: u32,
+    pub height: u32,
+    /// 1 = BC1, 4 = BC4, 5 = BC5, 7 = BC7, 11 = BCX (storage-only: read RGBA).
+    pub bcn_format: i32,
+    /// 8 for BC1/BC4, 16 for BC5/BC7.
+    pub block_bytes: u32,
+    pub mip_levels: u32,
+    /// 1 = color texture to sample as sRGB (e.g. DXGI_FORMAT_BC7_UNORM_SRGB).
+    pub srgb: u32,
+}
+
+/// Fill `out` for a GPU texture. Returns 0 on success, -1 on bad arguments,
+/// -2 when the asset is missing or not a block-compressed texture.
+#[no_mangle]
+pub unsafe extern "C" fn vfs_get_texture_info_c(
+    handle: *mut VortexVfs<std::fs::File>,
+    path_ptr: *const c_char,
+    out: *mut CTextureInfo,
+) -> i32 {
+    if handle.is_null() || path_ptr.is_null() || out.is_null() {
+        return -1;
+    }
+    let path = match CStr::from_ptr(path_ptr).to_str() {
+        Ok(s) => s,
+        Err(_) => return -1,
+    };
+    match (*handle).texture_info(path) {
+        Some(info) => {
+            *out = CTextureInfo {
+                width: info.width as u32,
+                height: info.height as u32,
+                bcn_format: info.bcn_format,
+                block_bytes: if info.bcn_format == crate::bcn::BCN_BC1
+                    || info.bcn_format == crate::bcn::BCN_BC4
+                {
+                    8
+                } else {
+                    16
+                },
+                mip_levels: info.mip_levels as u32,
+                srgb: info.srgb as u32,
+            };
+            0
+        }
+        None => -2,
+    }
+}
+
 // ================= Proprietary VXLZ-ANS C-ABI Interface =================
 
 #[no_mangle]

@@ -1725,6 +1725,16 @@ fn encode_bc7_block(px: &[[u8; 4]; 16]) -> ([u8; 16], f64) {
             hi = *p;
         }
     }
+    // Mode 6 shares one P-bit per endpoint across RGBA, so P=0 turns alpha 255
+    // into 254. Fully opaque blocks keep P=1 (alpha exactly 255) and fully
+    // transparent ones P=0 (alpha exactly 0).
+    let pbits: &[(u8, u8)] = if mn[3] == 255 {
+        &[(1, 1)]
+    } else if mx[3] == 0 {
+        &[(0, 0)]
+    } else {
+        &[(0, 0), (0, 1), (1, 0), (1, 1)]
+    };
     let mut best_err = u64::MAX;
     let mut best_q = ([0u8; 4], [0u8; 4]);
     let mut best_idx = [0u8; 16];
@@ -1736,11 +1746,11 @@ fn encode_bc7_block(px: &[[u8; 4]; 16]) -> ([u8; 16], f64) {
             e1[c] = sb[c] as f32;
         }
         for _ in 0..3 {
-            // All 4 P-bit combinations for the current continuous endpoints.
+            // Allowed P-bit combinations for the current continuous endpoints.
             let mut it_err = u64::MAX;
             let mut it_idx = [0u8; 16];
-            for pa in 0..2u8 {
-                for pb in 0..2u8 {
+            for &(pa, pb) in pbits {
+                {
                     let q0 = [
                         bc7_quant(e0[0], pa),
                         bc7_quant(e0[1], pa),
@@ -2173,6 +2183,29 @@ mod tests {
         assert!(psnr(&src, &dec) > 28.0);
         assert!(decode_bcx(&enc[..enc.len() - 1], 32, 32).is_err());
         assert!(decode_bcx(&[0u8; 3], 4, 4).is_err());
+    }
+
+    #[test]
+    fn test_bc7_opaque_and_transparent_alpha_exact() {
+        // Noisy RGB with constant alpha: P-bit choice must not perturb alpha.
+        let (w, h) = (16usize, 16usize);
+        for alpha in [255u8, 0u8] {
+            let mut rgba = vec![0u8; w * h * 4];
+            let mut x = 12345u32;
+            for px in rgba.chunks_mut(4) {
+                for c in px.iter_mut().take(3) {
+                    x = x.wrapping_mul(1103515245).wrapping_add(12345);
+                    *c = (x >> 16) as u8;
+                }
+                px[3] = alpha;
+            }
+            let dec = decode_bc7(&encode_bc7(&rgba, w, h).unwrap(), w, h).unwrap();
+            assert!(
+                dec.chunks(4).all(|p| p[3] == alpha),
+                "alpha {} not preserved",
+                alpha
+            );
+        }
     }
 
     #[test]

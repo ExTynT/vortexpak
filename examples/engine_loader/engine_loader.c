@@ -8,14 +8,19 @@
  *   1. Open a .vpak archive (seekable VFS)
  *   2. List assets / query metadata
  *   3. Stream a single texture's GPU block data on demand
- *   4. Read the stored GPU block payload (upload as-is for BC1/BC4/BC5/BC7)
- *   5. Read decoded RGBA texels (required for storage-only BCX)
- *   6. Measure load latency
+ *   4. Query texture metadata (format, size, mip count, sRGB)
+ *   5. Read the stored GPU block payload: every mip level, ready to upload
+ *      as-is for BC1/BC4/BC5/BC7
+ *   6. Read decoded RGBA texels (required for storage-only BCX)
+ *   7. Measure load latency
  *
  * Build:  see CMakeLists.txt or compile directly against vortexpak.h
  * Run:    engine_loader <archive.vpak> [texture_name]
  */
 
+#ifndef _WIN32
+#define _POSIX_C_SOURCE 199309L /* clock_gettime under -std=c11 */
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -98,10 +103,28 @@ int main(int argc, char **argv) {
     }
     printf("  Raw size: %lld B\n", (long long)raw_size);
 
-    /* Allocate generously: raw_size is the original file size (e.g. PNG) and
-     * the stored payload can be larger. A production loader would take the
-     * texture dimensions from the entry metadata instead. */
-    size_t buf_cap = (size_t)raw_size * 100 + 65536;
+    /* Texture metadata: exact payload size and per-level layout, no guessing. */
+    CTextureInfo tex;
+    if (vfs_get_texture_info_c(ark.vfs, target, &tex) != 0) {
+        fprintf(stderr, "  '%s' is not a GPU block-compressed texture\n", target);
+        vpak_close(&ark);
+        return 0;
+    }
+    static const char *names[] = {[1] = "BC1", [4] = "BC4", [5] = "BC5", [7] = "BC7", [11] = "BCX"};
+    printf("  Texture: %s%s %ux%u, %u mip level(s)\n", names[tex.bcn_format],
+           tex.srgb ? "_SRGB" : "", tex.width, tex.height, tex.mip_levels);
+    size_t payload = 0;
+    for (uint32_t i = 0; i < tex.mip_levels; i++) {
+        uint32_t lw = tex.width >> i, lh = tex.height >> i;
+        size_t size = (size_t)(lw / 4) * (lh / 4) * tex.block_bytes;
+        /* Upload: glCompressedTexImage2D(GL_TEXTURE_2D, i, fmt, lw, lh, 0, size, buf + payload) */
+        printf("    level %u: %ux%u, %zu B at offset %zu\n", i, lw, lh, size, payload);
+        payload += size;
+    }
+    size_t rgba = (size_t)tex.width * tex.height * 4;
+    size_t buf_cap = payload > rgba ? payload : rgba;
+    if (tex.bcn_format == 11) /* BCX: variable-size storage payload */
+        buf_cap = rgba * 2 + 65536;
     uint8_t *buf = malloc(buf_cap);
     if (!buf) {
         vpak_close(&ark);
@@ -136,7 +159,7 @@ int main(int argc, char **argv) {
     printf("\n── Key metrics for engine integration ──\n");
     printf("  Archive open (header-only): %.3f ms\n", t_open);
     printf("  Single-asset cold read:     %.3f ms\n", t_raw);
-    printf("  GPU upload: BC1/BC4/BC5/BC7 payloads directly; BCX via RGBA.\n");
+    printf("  GPU upload: BC1/BC4/BC5/BC7 payloads (all mips) directly; BCX via RGBA.\n");
 
     return 0;
 }

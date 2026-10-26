@@ -107,7 +107,9 @@ so random access is fully preserved.
 | 0 | `TX_ALPHA_STRIP` | RGBA source was 100 % opaque (`A==255`), stored as RGB |
 | 1 | `TX_ROW_RLE` | duplicate scanlines deduplicated (`counts` + unique rows) |
 | 2 | `TX_PLANAR_CHW` | interleaved pixels stored as planar (C,H,W) |
-| 3 | `TX_BCN` | payload is GPU block data (BC1/BC4/BC5), see below |
+| 3 | `TX_BCN` | payload is GPU block data (BC1/BC4/BC5/BC7/BCX), see below |
+| 4 | `TX_MIPS` | `TX_BCN` payload holds a mip chain, largest level first |
+| 5 | `TX_SRGB` | `TX_BCN` color texture, sample as sRGB (`*_UNORM_SRGB`) |
 | — | `0` | dense raw tensor |
 
 ### VXTX-GPU block compression (`TX_BCN`)
@@ -122,8 +124,29 @@ When `tx_flags` has bit 3 set, the entry payload is GPU block data:
   4 for BC1/BC7/BCX, 2 for BC5, 1 for BC4. Dimensions are multiples of 4.
 * `xxh64` is the checksum of the DECODED tensor (lossy format), so
   integrity verification works uniformly for all asset classes.
-* `materialize_full_rgba=False` reads return the stored payload;
-  `True` returns the decoded tensor (BC5 yields an (H, W, 2) array).
+* `materialize_full_rgba=False` reads return the stored payload (all mip
+  levels); `True` returns the decoded level-0 tensor (BC5 yields an (H, W, 2)
+  array).
+
+#### Mip chain (`TX_MIPS`) and color space (`TX_SRGB`)
+
+With bit 4 set, the payload is levels 0..n-1 concatenated, largest first.
+Level i is (width >> i) x (height >> i); levels continue while the next one
+is still a whole number of 4x4 blocks (both dimensions multiples of 8 before
+halving), so a 512x512 texture stores 512 ... 4 (8 levels) and a 12x12 one
+stores level 0 only (bit 4 clear). Level i occupies
+((width >> i) / 4) * ((height >> i) / 4) blocks of 8 B (BC1/BC4) or 16 B
+(BC5/BC7); the total must match exactly or the entry is rejected. Levels
+1..n are 2x2 box-filtered from the source pixels, never from decoded blocks;
+for `TX_SRGB` textures color channels are averaged in linear light and alpha
+linearly. BCX never carries mips. Archives without bit 4 are single-level.
+
+Bit 5 marks color textures (BC1/BC7/BCX) that store sRGB-encoded values:
+upload them as `DXGI_FORMAT_BC1_UNORM_SRGB` / `BC7_UNORM_SRGB`
+(`VK_FORMAT_BC1_RGBA_SRGB_BLOCK` / `VK_FORMAT_BC7_SRGB_BLOCK`). BC4/BC5
+(masks, normal maps) are linear. `VortexVFS.read_dds` / `vortexpak extract
+--dds` wrap the stored payload in a DDS (DX10 header) with these formats and
+the mip count; `vfs_get_texture_info_c` returns the same metadata in C.
 
 Conformance is tested in CI: every format is decoded by an independent
 reference decoder (Pillow's BCn decoder via a DDS wrapper) and must match
@@ -212,4 +235,6 @@ Parsers (`VortexArchive.from_bytes`, `VortexVFS.open`, Rust decoders) must:
 Native engines consume the same functionality without Python via
 `vortexpak_native/vortexpak.h` (generated from `c_api.rs` with cbindgen):
 VXTX transforms, parallel micro-block/texture decode, RDO quantization,
-VXLZ compress/decompress and a native seekable VFS.
+VXLZ compress/decompress and a native seekable VFS (`vfs_open_c`,
+`vfs_read_asset_c`, `vfs_get_texture_info_c` for format/size/mips/sRGB of a
+GPU texture).
