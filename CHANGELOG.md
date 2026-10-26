@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- North Star "Xonotic −40 %" in the README roadmap: six measurable gates (size,
+  exactness, texture quality, real game, load speed, iteration) with measured
+  current values; `benchmarks/xonotic_baseline.py` reproduces the baseline.
+- README roadmap with milestones, progress and a Mermaid diagram, generated
+  from `docs/roadmap.json` by `tools/roadmap.py` (`done M9` / `set M13 active`);
+  CI fails when the README view is stale.
+- Engine-ready GPU textures: BC1/BC4/BC5/BC7 payloads carry a full mip chain
+  (`TX_MIPS`, default on, `--no-mips` / `mips=False` to disable), box filtered
+  in linear light for sRGB color; color textures are tagged `TX_SRGB`. The
+  `--gpu auto` floor applies to level 0; the worst mip is reported
+  (`gpu_min_mip_color_psnr_db`).
+- DDS export: `VortexVFS.read_dds`, `vortexpak extract --dds` (DX10 header,
+  `*_UNORM_SRGB` formats, mip count). `VortexVFS.texture_info` and C-ABI
+  `vfs_get_texture_info_c` describe format, size, mips and color space; the
+  engine loader example uses it and runs in CI.
+- `layout="stream"` (new default, `--layout`): assets >= 64 KiB get their own
+  block(s), smaller ones share ~256 KiB blocks, bounding bytes decoded per
+  random read. `layout="compact"` keeps the previous larger shared blocks.
+- `gpu_min_psnr_db` / `--gpu-min-psnr` (default 35 dB) quality floor for
+  `--gpu auto`; per-archive metrics report formats chosen, lossless fallbacks,
+  pooled color PSNR and the worst texture.
+- Strict impartial benchmark protocol: solid, indexed and per-file archive baselines; SHA-256 verification of every original file, matched CPU affinity, randomized isolated trials, raw latency/CPU/RSS data and bootstrap intervals.
+- Separate reference-decoded texture benchmark with RGB-only pooled-MSE PSNR, explicit FLIP viewing parameters, complete Kodak validation and per-image observations.
+- Benchmark adapter, worker, statistics and quality regression tests; optional `benchmark` dependency extra.
 - Reference-decoder conformance tests: every GPU format is wrapped in a DDS
   container and decoded by Pillow; native and fallback paths must match it
   bit-for-bit.
@@ -17,11 +41,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - C engine-loader example (`examples/engine_loader`).
 
 ### Changed
+- GPU texture encoding runs per texture across the codec thread pool
+  (deterministic, identical archive bytes): Xonotic textures with mips pack in
+  33.6 s instead of 75.0 s sequentially, without mips 23.5 s instead of 44.5 s.
+- `--gpu auto` now tries BC1 then BC7 and accepts the first that meets the
+  floor (previously: BC1 for every opaque texture regardless of quality).
+- GPU and RDO texture PSNR exclude alpha; alpha is checked separately. Metric
+  `gpu_avg_psnr_db` (mean of dB, alpha included) is replaced by pooled
+  `gpu_color_psnr_db` and `gpu_min_color_psnr_db`.
 - BC1 MAX encoder ~13x faster (greedy 565 polish, quantile split, integer
   metric, AVX2 evaluation); costs ~1.9 dB avg on Kodak vs the previous
   exhaustive search.
 
 ### Fixed
+- Without the native core, BCX textures were decoded as BC1 and every BCX
+  archive failed to read (`BCN payload length ... != expected`).
+- BC7 mode 6 shares one P-bit across RGBA; the encoder chose P=0 freely and
+  turned opaque alpha 255 into 254 (1861 of 4096 texels on an opaque noise
+  test image). Opaque blocks now use P=1 and fully transparent blocks P=0,
+  in both the native and NumPy encoders.
+- `mode="strict"` accepted `rdo=True`, which rewrote PNG bytes and broke the
+  byte-exact contract. Strict now rejects `rdo` and `gpu`.
 - **BC4/BC5/BC7 were not spec-conformant**: GPUs would have decoded them
   incorrectly. BC4 palette order, BC5 block interleaving and BC7 now follow
   the D3D11/Vulkan spec (BC7 = real mode 6 with 4-bit indices). Archives

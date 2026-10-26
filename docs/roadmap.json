@@ -1,0 +1,214 @@
+{
+  "north_star": {
+    "title": "Xonotic −40 %",
+    "statement": "Ship the complete Xonotic 0.8.6 release in 40 % fewer bytes, from one .vpak: the same game on a real GPU, no slower to load, rebuilt in seconds after an edit — every number reproducible with one command.",
+    "gates": [
+      {
+        "gate": "Size",
+        "target": "≤ 711 MB for all 14,597 files (≤ 0.60× of the 1,185.2 MB shipped pk3 download)",
+        "today": "1,114.5 MB byte-exact (0.94×, default stream layout); 1,077.6 MB with compact (0.91×). Lossless alone cannot reach the target: 27 % of the download is already-compressed .jpg/.ogg."
+      },
+      {
+        "gate": "Exact",
+        "target": "Every non-texture file byte-identical (SHA-256); JPEG recompression bit-exact",
+        "today": "Strict mode verified byte-exact on all 14,597 files"
+      },
+      {
+        "gate": "Texture quality",
+        "target": "Every re-encoded DXT texture ≥ 40 dB RGB and alpha against the shipped texture, on every mip level",
+        "today": "Shipped .dds (DXT1 982 MB, DXT5 621 MB raw) are opaque data; no DDS ingest, no BC3 (DXT5) encoder, no RDO for existing blocks"
+      },
+      {
+        "gate": "Real game",
+        "target": "Stock Xonotic 0.8.6 runs from the .vpak through a DarkPlaces filesystem backend on a real GPU: every official map loads, a recorded demo plays to the end, zero missing assets",
+        "today": "No engine backend; never run on a GPU"
+      },
+      {
+        "gate": "Load speed",
+        "target": "No map loads slower than from the shipped pk3 files (median of 7 runs); single-asset read p99 ≤ 1 ms",
+        "today": "Not measured; VXLZ decodes 2.4–4.6× slower than zstd on the same blocks"
+      },
+      {
+        "gate": "Iteration",
+        "target": "Changing one texture rebuilds the archive in ≤ 5 s on 8 cores; the resulting patch is ≤ 2× that asset’s compressed size",
+        "today": "Full repack only: 18.0 s (stream) / 250.2 s (compact) on 16 workers; patch size not measured"
+      }
+    ],
+    "evidence": "benchmarks/reports/v2/north-star/BASELINE.md"
+  },
+  "phases": [
+    {
+      "title": "Trustworthy foundation",
+      "milestones": [
+        {
+          "id": "M1",
+          "title": "Spec-conformant GPU blocks",
+          "goal": "BC1/BC4/BC5/BC7 blocks decode bit-exactly with an independent reference decoder (Pillow DDS).",
+          "status": "done",
+          "date": "2026-10-25",
+          "evidence": "tests/test_bcn.py"
+        },
+        {
+          "id": "M2",
+          "title": "Hardened container",
+          "goal": "Corrupt or truncated archives raise a clean error; adversarial fuzz tests in Python and Rust.",
+          "status": "done",
+          "date": "2026-10-25",
+          "evidence": "tests/test_robustness.py"
+        },
+        {
+          "id": "M3",
+          "title": "Portable builds",
+          "goal": "pip-installable package with the Rust core; CI on Windows, Linux and macOS plus a pure-NumPy fallback.",
+          "status": "done",
+          "date": "2026-10-25",
+          "evidence": ".github/workflows/ci.yml"
+        },
+        {
+          "id": "M4",
+          "title": "Reproducible benchmark",
+          "goal": "Receipted builds, hash-chained raw evidence and a qualified 1-CPU reference run.",
+          "status": "done",
+          "date": "2026-10-26",
+          "evidence": "benchmarks/reports/v2/full-9800x3d-r3/RESULTS.md"
+        }
+      ]
+    },
+    {
+      "title": "Quality and streaming guarantees",
+      "milestones": [
+        {
+          "id": "M5",
+          "title": "Byte-exact strict mode",
+          "goal": "`--mode strict` restores every byte and rejects the lossy `--rdo` and `--gpu` options.",
+          "status": "done",
+          "date": "2026-10-26",
+          "evidence": "tests/test_bcn.py"
+        },
+        {
+          "id": "M6",
+          "title": "Texture quality floor",
+          "goal": "`--gpu auto` never ships a texture below the floor (default 35 dB RGB) or with altered opaque alpha.",
+          "status": "done",
+          "date": "2026-10-26",
+          "evidence": "benchmarks/reports/v2/ab-physical8/RESULTS.md"
+        },
+        {
+          "id": "M7",
+          "title": "Stream block layout",
+          "goal": "Large assets get their own blocks: Kenney single-asset p99 5.96 → 0.36 ms for +0.4 % size.",
+          "status": "done",
+          "date": "2026-10-26",
+          "evidence": "benchmarks/reports/v2/ab-physical8/RESULTS.md"
+        }
+      ]
+    },
+    {
+      "title": "Engine-ready textures",
+      "milestones": [
+        {
+          "id": "M8",
+          "title": "Mips, sRGB, DDS",
+          "goal": "Full mip chains, sRGB/linear tag, DDS export and texture metadata in the C-ABI.",
+          "status": "done",
+          "date": "2026-10-26",
+          "evidence": "benchmarks/reports/v2/textures-mips/RESULTS.md"
+        },
+        {
+          "id": "M20",
+          "title": "DXT ingest",
+          "goal": "Read shipped DDS (DXT1/3/5 with mips) as GPU textures; add BC3 encode/decode with reference-decoder conformance.",
+          "status": "next"
+        },
+        {
+          "id": "M21",
+          "title": "RDO for shipped DXT",
+          "goal": "Rate-distortion re-encoding of existing DXT blocks for the entropy coder, gated at 40 dB against the shipped texture.",
+          "status": "planned"
+        },
+        {
+          "id": "M9",
+          "title": "Normal maps",
+          "goal": "Detect normal maps; encode BC5 with renormalized mips.",
+          "status": "planned"
+        },
+        {
+          "id": "M10",
+          "title": "Full BC7",
+          "goal": "BC7 modes beyond 6 to cut the size cost of the quality floor (Xonotic +74 %).",
+          "status": "planned"
+        },
+        {
+          "id": "M11",
+          "title": "KTX2 export",
+          "goal": "KTX2 output for Vulkan, Bevy and Godot.",
+          "status": "planned"
+        },
+        {
+          "id": "M12",
+          "title": "Mobile formats",
+          "goal": "ASTC/ETC2; blocked on a reference-decoder conformance oracle.",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "title": "Engine integration",
+      "milestones": [
+        {
+          "id": "M13",
+          "title": "Complete C-ABI",
+          "goal": "Asset enumeration, thread-safe reads and readable error messages.",
+          "status": "next"
+        },
+        {
+          "id": "M14",
+          "title": "DarkPlaces backend",
+          "goal": "Xonotic reads its data from a .vpak through a DarkPlaces filesystem backend; GPU textures upload as stored.",
+          "status": "planned"
+        },
+        {
+          "id": "M15",
+          "title": "Real-GPU validation",
+          "goal": "Upload and read back every format on real D3D12/Vulkan/OpenGL hardware; play the North-Star demo.",
+          "status": "planned"
+        }
+      ]
+    },
+    {
+      "title": "Production pipeline",
+      "milestones": [
+        {
+          "id": "M22",
+          "title": "Lossless JPEG recompression",
+          "goal": "Bit-exact recompression of the 173 MB of shipped JPEGs (Lepton-style).",
+          "status": "planned"
+        },
+        {
+          "id": "M16",
+          "title": "Incremental repack",
+          "goal": "Repack only the assets that changed.",
+          "status": "planned"
+        },
+        {
+          "id": "M17",
+          "title": "Patch-friendly archives",
+          "goal": "Measure and minimize archive bytes that change when one asset changes.",
+          "status": "planned"
+        },
+        {
+          "id": "M18",
+          "title": "Faster VXLZ decode",
+          "goal": "VXLZ decodes 2.4–4.6× slower than zstd on the same blocks.",
+          "status": "planned"
+        },
+        {
+          "id": "M19",
+          "title": "Cold-disk benchmark",
+          "goal": "Physical-IO protocol, separate from codec-cache resets.",
+          "status": "planned"
+        }
+      ]
+    }
+  ]
+}
