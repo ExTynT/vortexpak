@@ -1,5 +1,13 @@
 * text=auto
 *.png binary
+# Benchmark harness files are hashed into the protocol fingerprint; keep the
+# recorded bytes on every checkout.
+benchmarks/protocol.json text eol=lf
+benchmarks/protocol.py text eol=lf
+benchmarks/measurement.py text eol=lf
+benchmarks/rigorous.py text eol=lf
+benchmarks/rigorous_quality.py text eol=lf
+benchmarks/run_reference.py text eol=lf
 *.dll binary
 *.lib binary
 *.pdb binary

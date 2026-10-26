@@ -6,6 +6,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-26
+
+**Breaking:** `mode="strict"` rejects `rdo` and `gpu`; the `gpu_avg_psnr_db`
+metric is replaced by `gpu_color_psnr_db` / `gpu_min_color_psnr_db`; the
+default block layout is `stream`; archives with mip chains (`TX_MIPS`) need a
+3.x reader; BC4/BC5/BC7 archives written by 2.1.0 must be repacked (they were
+not spec-conformant).
+
 ### Added
 - North Star "Xonotic −40 %" in the README roadmap: six measurable gates (size,
   exactness, texture quality, real game, load speed, iteration) with measured
@@ -113,5 +121,6 @@ First public release.
   boundary; decoder bounds-checked and adversarially fuzz-tested
   (300 mutation rounds Python, block-level Rust fuzz).
 
-[Unreleased]: https://github.com/ExTynT/vortexpak/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/ExTynT/vortexpak/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/ExTynT/vortexpak/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/ExTynT/vortexpak/releases/tag/v2.1.0
