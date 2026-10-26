@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-26
+
+### Added
+- `vxcm` (Rust): VortexPak's own LZ + context-modelled binary range coder (LZMA-class
+  modelling, price-based optimal parsing, automatic literal/position context selection).
+  Per file on every 64th Xonotic 0.8.6 file (229 files, 38.3 MB): 14,503,354 B versus
+  14,892,889 B for raw LZMA1 preset 9e (-2.6 %) and 16,315,795 B for zstd-19 (-11.1 %);
+  decode 45 MB/s, encode 0.9 MB/s per thread (exploratory single run on a shared host);
+  every file restored exactly. Not yet used by the container.
+- `dxt` (Rust): byte-exact DXT1-DXT5 field-split record (`VXD1`); verified on all 8,186
+  Xonotic DDS files (6,824 split, 1,362 non-DXT skipped, 0 mismatches). Not yet used by
+  the container.
+- `examples/vxcm_bench.rs` and `examples/dxt_roundtrip.rs` real-data checks.
+
 ## [3.0.2] - 2026-10-26
 
 ### Fixed
