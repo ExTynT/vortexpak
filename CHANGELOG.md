@@ -6,6 +6,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.2] - 2026-10-26
+
+### Fixed
+- Benchmark-harness subprocess test failed on macOS, where `psutil` cannot
+  pin CPU affinity. The harness already refuses such hosts (no matched CPU
+  budget is possible); the test now asserts that refusal instead of a report.
+
 ## [3.0.1] - 2026-10-26
 
 ### Fixed
@@ -131,7 +138,8 @@ First public release.
   boundary; decoder bounds-checked and adversarially fuzz-tested
   (300 mutation rounds Python, block-level Rust fuzz).
 
-[Unreleased]: https://github.com/ExTynT/vortexpak/compare/v3.0.1...HEAD
+[Unreleased]: https://github.com/ExTynT/vortexpak/compare/v3.0.2...HEAD
+[3.0.2]: https://github.com/ExTynT/vortexpak/compare/v3.0.1...v3.0.2
 [3.0.1]: https://github.com/ExTynT/vortexpak/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/ExTynT/vortexpak/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/ExTynT/vortexpak/releases/tag/v2.1.0

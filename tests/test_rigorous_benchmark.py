@@ -243,6 +243,14 @@ class TestRigorousBenchmark(unittest.TestCase):
             "8",
         ]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=90)
+        import psutil
+
+        if not hasattr(psutil.Process, "cpu_affinity"):
+            # e.g. macOS: no CPU budget can be enforced, so the harness must refuse
+            # (harness bytes are part of the protocol fingerprint; not patched here).
+            self.assertNotEqual(0, r.returncode)
+            self.assertFalse((out / "report.json").exists())
+            return
         self.assertEqual(0, r.returncode, r.stderr)
         report = json.loads((out / "report.json").read_text())
         self.assertEqual("complete", report["status"])
