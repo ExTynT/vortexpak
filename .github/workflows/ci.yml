@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-13]
+        os: [windows-latest, ubuntu-latest, macos-15-intel]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-13]
+        os: [windows-latest, ubuntu-latest, macos-15-intel]
         python: ["3.10", "3.12"]
     steps:
       - uses: actions/checkout@v4
@@ -40,7 +40,7 @@ jobs:
           python-version: ${{ matrix.python }}
       - uses: dtolnay/rust-toolchain@stable
       - name: Install (builds native core via cargo)
-        run: pip install -e .
+        run: pip install -e ".[benchmark]"
       - name: Test suite
         run: python -m unittest discover -s tests -v
 
@@ -54,7 +54,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -e .
+      - run: pip install -e ".[benchmark]"
       - name: Test suite on the pure NumPy path
         run: python -m unittest discover -s tests -v
 

@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.1] - 2026-10-26
+
+### Fixed
+- CI: macOS jobs never started (the retired `macos-13` runner); they now run
+  on `macos-15-intel`.
+- CI: benchmark-harness tests failed without `psutil`; CI installs the
+  `benchmark` extra and the tests skip cleanly when it is missing.
+- Build-receipt test compared an unresolved temp path (Windows 8.3 short
+  names, macOS `/private`).
+
 ## [3.0.0] - 2026-10-26
 
 **Breaking:** `mode="strict"` rejects `rdo` and `gpu`; the `gpu_avg_psnr_db`
@@ -121,6 +131,7 @@ First public release.
   boundary; decoder bounds-checked and adversarially fuzz-tested
   (300 mutation rounds Python, block-level Rust fuzz).
 
-[Unreleased]: https://github.com/ExTynT/vortexpak/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/ExTynT/vortexpak/compare/v3.0.1...HEAD
+[3.0.1]: https://github.com/ExTynT/vortexpak/compare/v3.0.0...v3.0.1
 [3.0.0]: https://github.com/ExTynT/vortexpak/compare/v2.1.0...v3.0.0
 [2.1.0]: https://github.com/ExTynT/vortexpak/releases/tag/v2.1.0

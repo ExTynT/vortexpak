@@ -28,4 +28,4 @@ __all__ = [
     "quantize_float32_mantissa",
     "IS_NATIVE_AVAILABLE",
 ]
-__version__ = "3.0.0"
+__version__ = "3.0.1"

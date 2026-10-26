@@ -7,6 +7,8 @@ import numpy as np
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
+if importlib.util.find_spec("psutil") is None:
+    raise unittest.SkipTest("benchmark harness tests need the benchmark extra (psutil)")
 SPEC = importlib.util.spec_from_file_location(
     "rigorous_quality", ROOT / "benchmarks/rigorous_quality.py"
 )

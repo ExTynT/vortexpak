@@ -1,10 +1,14 @@
 import copy
+import importlib.util
 from pathlib import Path
+import sys
 import unittest
 
-from benchmarks import protocol
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from benchmarks import protocol  # noqa: E402
 
 
+@unittest.skipUnless(importlib.util.find_spec("psutil"), "install the benchmark extra")
 class TestMeasurement(unittest.TestCase):
     def test_no_sampling_thread_and_unresolved_cpu(self):
         from benchmarks import measurement
@@ -104,6 +108,7 @@ class TestLedger(unittest.TestCase):
 
 
 class TestStatisticsPolicy(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec("psutil"), "install the benchmark extra")
     def test_censored_cpu_never_becomes_conditional_median(self):
         from benchmarks.rigorous import nullable_stat
 
@@ -144,7 +149,7 @@ class TestReceipt(unittest.TestCase):
         import tempfile
 
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
+            root = Path(td).resolve()  # 8.3 short names (Windows), /private (macOS)
             (root / "vortexpak").mkdir()
             (root / "vortexpak/a.py").write_bytes(b"a=1")
             (root / "vortexpak/native.dll").write_bytes(b"not executable")
