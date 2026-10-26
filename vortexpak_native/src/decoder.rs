@@ -13,6 +13,7 @@ pub const STRAT_ZSTD_19: u32 = 5;
 pub const STRAT_TOKEN_FOLD_ZSTD6: u32 = 6;
 pub const STRAT_TOKEN_FOLD_ZSTD19: u32 = 7;
 pub const STRAT_VXLZ: u32 = 8;
+pub const STRAT_VXCM: u32 = 11;
 
 #[derive(Debug, Clone)]
 pub struct MicroBlockDesc<'a> {
@@ -113,6 +114,17 @@ pub fn decompress_block_into(block: &MicroBlockDesc, dst: &mut [u8]) -> Result<u
                 return Ok(0);
             }
             crate::vxlz::vxlz_decompress_into(block.compressed_payload, dst)
+        }
+        STRAT_VXCM => {
+            if dst.len() < block.raw_size {
+                return Err("VXCM destination buffer too small".into());
+            }
+            let raw = crate::vxcm::vxcm_decompress(block.compressed_payload, block.raw_size)?;
+            if raw.len() != block.raw_size {
+                return Err("VXCM output length mismatch".into());
+            }
+            dst[..raw.len()].copy_from_slice(&raw);
+            Ok(raw.len())
         }
         unknown => Err(format!("Unknown block strategy: {unknown}")),
     }
@@ -227,6 +239,7 @@ mod tests {
         };
         for strategy in [
             STRAT_VXLZ,
+            STRAT_VXCM,
             STRAT_LZ4_FAST,
             STRAT_ZSTD_3,
             STRAT_ZSTD_19,

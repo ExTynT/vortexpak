@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-26
+
+### Added
+- Container strategy 11 `VXCM`: the default entropy backend for `--layout compact`
+  when the native core is present (`entropy_backend="auto"`); compact VXCM blocks
+  target 16 MiB so the coder sees long-range redundancy.
+- Tx flag bit 6 `TX_DXT_SPLIT`: DXT1-DXT5 `.dds` files are stored as byte-exact
+  `VXD1` field-split records; every read path returns the original bytes.
+- Exact-duplicate files are stored once; later copies reference the first copy's bytes.
+- C-ABI: `vxcm_compress_c`, `vxcm_decompress_c`, `dxt_split_c`, `dxt_merge_c`.
+- `benchmarks/xonotic_lossless.py`: byte-exact Xonotic 0.8.6 repack with SHA-256
+  verification of every file (in-memory decode and VFS reads) against solid
+  `xz -9e` and `zstd -19 --long=31` of the same files.
+
+### Changed
+- Default `entropy_backend` is `auto`. Archives with strategy-11 blocks need the
+  native core to decode; archives written by earlier versions decode unchanged.
+
 ## [3.1.0] - 2026-10-26
 
 ### Added

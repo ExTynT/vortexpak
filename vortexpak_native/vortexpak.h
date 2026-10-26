@@ -44,6 +44,8 @@
 
 #define STRAT_VXLZ 8
 
+#define STRAT_VXCM 11
+
 /**
  * TX_BCN payload holds a mip chain (see `mip_dims`), largest level first.
  */
@@ -53,6 +55,8 @@
  * TX_BCN color texture that should be sampled as sRGB.
  */
 #define TX_SRGB (1 << 5)
+
+#define TX_DXT_SPLIT (1 << 6)
 
 #define TX_RAW_DENSE 0
 
@@ -228,6 +232,21 @@ int64_t vxlz_decompress_c(const uint8_t *src_ptr,
                           uintptr_t src_len,
                           uint8_t *dst_ptr,
                           uintptr_t dst_len);
+
+int64_t vxcm_compress_c(const uint8_t *src_ptr,
+                        uintptr_t src_len,
+                        uint32_t level,
+                        uint8_t *dst_ptr,
+                        uintptr_t dst_cap);
+
+int64_t vxcm_decompress_c(const uint8_t *src_ptr,
+                          uintptr_t src_len,
+                          uint8_t *dst_ptr,
+                          uintptr_t dst_len);
+
+int64_t dxt_split_c(const uint8_t *src_ptr, uintptr_t src_len, uint8_t *dst_ptr, uintptr_t dst_cap);
+
+int64_t dxt_merge_c(const uint8_t *src_ptr, uintptr_t src_len, uint8_t *dst_ptr, uintptr_t dst_cap);
 
 int32_t vxlz_compress_blocks_parallel_c(struct CVxlzCompressDesc *descs_ptr, uintptr_t num_blocks);
 

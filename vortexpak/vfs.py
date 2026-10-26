@@ -31,8 +31,9 @@ from .codec import (
     TX_BCN,
     TX_MIPS,
     TX_SRGB,
+    TX_DXT_SPLIT,
 )
-from .native import IS_NATIVE_AVAILABLE, native_decompress_block
+from .native import IS_NATIVE_AVAILABLE, native_decompress_block, native_dxt_merge
 
 
 class BlockLRUCache:
@@ -320,6 +321,8 @@ class VortexVFS:
                     tx_mode=entry.tx_mode,
                 )
                 return bytes(arr)
+            if entry.tx_flags & TX_DXT_SPLIT:
+                return native_dxt_merge(joined)
             return joined
 
         # Single block asset
@@ -339,6 +342,9 @@ class VortexVFS:
                 tx_mode=entry.tx_mode,
             )
             return bytes(arr)
+
+        if entry.tx_flags & TX_DXT_SPLIT:
+            return native_dxt_merge(bytes(slice_data))
 
         if entry.aux_block_id >= 0:
             meta_bytes = bytes(slice_data)

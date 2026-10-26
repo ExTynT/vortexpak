@@ -59,6 +59,9 @@ Two variants, distinguished by prefix:
   (strict mode: PNG metadata chunks split from IDAT streams).
 * `stripe_spans` — list of `[block_id, offset, length]` triples. Non-empty for
   assets striped across several parallel blocks (e.g. huge tilemap XML).
+* Exact-duplicate raw assets may reference the same stored bytes, including
+  identical stripe spans and transform flags. Each entry keeps its own path,
+  original `raw_size` and XXH3-64 checksum.
 
 **Block row** (exactly 7 fields):
 
@@ -92,6 +95,15 @@ A block decompresses (per `strategy_id`) to exactly `raw_size` bytes.
 | 8 | `VXLZ` | proprietary VortexLZ-ANS stream (§6) |
 | 9 | `ZSTD6_DICT` | zstd frame seeded with the lane's trained dictionary block |
 | 10 | `ZSTD19_DICT` | reserved: zstd-19 + dictionary frame (decoder-identical to 9) |
+| 11 | `VXCM` | `b"VXC1"` + u8 `props` + u8 `dict_log` + LZMA-class range-coded body without an end marker |
+
+For VXCM, `props = lc + 9*(lp + 5*pb)`. The block table supplies the
+uncompressed `raw_size`; the normative decoder is
+`vortexpak_native/src/vxcm.rs`. VXCM decoding requires the native core.
+Compact layout with `entropy_backend="auto"` selects VXCM when native is
+available, with shared blocks and large-asset stripes targeting 16 MiB;
+otherwise auto uses VXLZ. Stream layout retains its existing block sizes.
+VXCM blocks do not use lane dictionaries.
 
 **Lane dictionaries**: block rows carry an 8th field `dict_block_id`
 (`-1` = none; 7-field rows from older archives remain valid). It points to a
@@ -100,7 +112,10 @@ zstd-19 frame). Blocks with strategy 9/10 decompress with that dictionary;
 the dictionary block itself never uses a dictionary strategy (no chaining),
 so random access is fully preserved.
 
-### VXTX texture tensor flags (`tx_flags`, engine mode)
+### Entry transform flags (`tx_flags`)
+
+Bits 0–5 describe engine-mode texture tensors. Bit 6 describes reversible
+raw DDS preprocessing in either archive mode.
 
 | Bit | Name | Meaning |
 | --- | --- | --- |
@@ -110,7 +125,35 @@ so random access is fully preserved.
 | 3 | `TX_BCN` | payload is GPU block data (BC1/BC4/BC5/BC7/BCX), see below |
 | 4 | `TX_MIPS` | `TX_BCN` payload holds a mip chain, largest level first |
 | 5 | `TX_SRGB` | `TX_BCN` color texture, sample as sRGB (`*_UNORM_SRGB`) |
+| 6 | `TX_DXT_SPLIT` | non-texture payload is a reversible `VXD1` field-split DDS record |
 | — | `0` | dense raw tensor |
+
+### DXT field-split record (`TX_DXT_SPLIT`)
+
+The normative implementation is `vortexpak_native/src/dxt.rs`. Supported
+DDS fourCCs are DXT1, DXT2/3 and DXT4/5; kind values are respectively 1, 3
+and 5. The byte-exact record is:
+
+| Offset | Size | Field |
+| --- | --- | --- |
+| 0 | 4 | ASCII `VXD1` |
+| 4 | 1 | kind: 1, 3 or 5 |
+| 5 | 4 | u32 complete block count `n` |
+| 9 | 1 | trailing byte count `t`, less than block size |
+| 10 | 128 | original DDS header, unchanged |
+| 138 | `4*n` | color endpoint pairs, in original block order |
+| `138 + 4*n` | `4*n` | color index fields, in original block order |
+| `138 + 8*n` | kind-dependent | alpha fields (below) |
+| record end minus `t` | `t` | original trailing bytes, unchanged |
+
+DXT1 blocks are 8 bytes with no alpha fields. DXT2/3 blocks are 16 bytes;
+the alpha region holds each block's original 8-byte explicit-alpha field.
+DXT4/5 blocks are 16 bytes; the alpha region holds `2*n` endpoint bytes
+followed by `6*n` alpha-index bytes. The record is exactly original DDS
+length plus 10 bytes. Stored stripes are concatenated before merging.
+All raw read APIs, including unmaterialized reads, return the original DDS
+bytes rather than the record; entry `raw_size` and checksum describe those
+original bytes.
 
 ### VXTX-GPU block compression (`TX_BCN`)
 

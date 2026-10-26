@@ -71,6 +71,7 @@ const TX_BCN: u32 = 1 << 3;
 pub const TX_MIPS: u32 = 1 << 4;
 /// TX_BCN color texture that should be sampled as sRGB.
 pub const TX_SRGB: u32 = 1 << 5;
+pub const TX_DXT_SPLIT: u32 = 1 << 6;
 
 /// Stored mip level sizes for a w x h texture: halve while the next level is
 /// still a whole number of 4x4 blocks. Level 0 is always included.
@@ -422,6 +423,9 @@ impl<R: Read + Seek> VortexVfs<R> {
                 }
                 out.extend_from_slice(&block_bytes[off..off + len]);
             }
+            if !entry.is_texture_tensor && entry.tx_flags & TX_DXT_SPLIT != 0 {
+                return crate::dxt::dxt_merge(&out);
+            }
             if materialize_rgba && entry.is_texture_tensor && entry.tx_flags & TX_BCN != 0 {
                 return decode_bcn_entry(&entry, &out);
             }
@@ -507,6 +511,8 @@ impl<R: Read + Seek> VortexVfs<R> {
             }
 
             Ok(tensor_buf)
+        } else if entry.tx_flags & TX_DXT_SPLIT != 0 {
+            crate::dxt::dxt_merge(raw_slice)
         } else {
             Ok(raw_slice.to_vec())
         }
@@ -542,6 +548,51 @@ fn hex_decode(s: &str) -> Result<Vec<u8>, String> {
 #[cfg(test)]
 mod mip_tests {
     use super::*;
+
+    #[test]
+    fn dxt_split_reads_original_bytes_and_size() {
+        let mut dds = vec![0u8; 147];
+        dds[..4].copy_from_slice(b"DDS ");
+        dds[4..8].copy_from_slice(&124u32.to_le_bytes());
+        dds[84..88].copy_from_slice(b"DXT5");
+        for (i, b) in dds[128..].iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        let rec = crate::dxt::dxt_split(&dds).unwrap();
+        let entry = VfsAssetEntry {
+            rel_path: "test.dds".into(),
+            raw_size: dds.len(),
+            is_texture_tensor: false,
+            tx_flags: TX_DXT_SPLIT,
+            tx_shape: vec![],
+            tx_mode: String::new(),
+            tx_rle_unique_rows: 0,
+            block_id: 0,
+            offset_in_block: 0,
+            length_in_block: rec.len(),
+            aux_block_id: -1,
+            aux_offset: 0,
+            aux_length: 0,
+            stripe_spans: vec![],
+        };
+        let mut vfs = VortexVfs {
+            reader: std::io::Cursor::new(Vec::<u8>::new()),
+            mode: "lossless".into(),
+            total_raw_bytes: dds.len(),
+            entries: vec![entry],
+            path_index: HashMap::from([("test.dds".into(), 0)]),
+            blocks: vec![],
+            block_cache: HashMap::from([(0, rec.clone())]),
+            lru_queue: VecDeque::from([0]),
+            cache_capacity: 2,
+        };
+        assert_eq!(vfs.get_asset_size("test.dds"), Some(dds.len()));
+        assert_eq!(vfs.read_asset("test.dds", false).unwrap(), dds);
+        let mid = rec.len() / 2;
+        vfs.block_cache = HashMap::from([(0, rec[..mid].to_vec()), (1, rec[mid..].to_vec())]);
+        vfs.entries[0].stripe_spans = vec![(0, 0, mid), (1, 0, rec.len() - mid)];
+        assert_eq!(vfs.read_asset("test.dds", true).unwrap(), dds);
+    }
 
     #[test]
     fn mip_dims_stop_at_block_granularity() {

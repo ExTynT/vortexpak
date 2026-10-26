@@ -559,6 +559,92 @@ pub unsafe extern "C" fn vxlz_decompress_c(
     }
 }
 
+#[no_mangle]
+pub unsafe extern "C" fn vxcm_compress_c(
+    src_ptr: *const u8,
+    src_len: usize,
+    level: u32,
+    dst_ptr: *mut u8,
+    dst_cap: usize,
+) -> i64 {
+    if src_ptr.is_null() || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    let comp = crate::vxcm::vxcm_compress(src, level.clamp(1, 9) as u8);
+    if comp.len() > dst_cap {
+        return -2;
+    }
+    std::ptr::copy_nonoverlapping(comp.as_ptr(), dst_ptr, comp.len());
+    comp.len() as i64
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn vxcm_decompress_c(
+    src_ptr: *const u8,
+    src_len: usize,
+    dst_ptr: *mut u8,
+    dst_len: usize,
+) -> i64 {
+    if src_ptr.is_null() || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    match crate::vxcm::vxcm_decompress(src, dst_len) {
+        Ok(raw) if raw.len() == dst_len => {
+            std::ptr::copy_nonoverlapping(raw.as_ptr(), dst_ptr, dst_len);
+            dst_len as i64
+        }
+        _ => -2,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn dxt_split_c(
+    src_ptr: *const u8,
+    src_len: usize,
+    dst_ptr: *mut u8,
+    dst_cap: usize,
+) -> i64 {
+    if src_ptr.is_null() || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    match crate::dxt::dxt_split(src) {
+        Some(rec) => {
+            if rec.len() > dst_cap {
+                return -2;
+            }
+            std::ptr::copy_nonoverlapping(rec.as_ptr(), dst_ptr, rec.len());
+            rec.len() as i64
+        }
+        None => 0,
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn dxt_merge_c(
+    src_ptr: *const u8,
+    src_len: usize,
+    dst_ptr: *mut u8,
+    dst_cap: usize,
+) -> i64 {
+    if src_ptr.is_null() || dst_ptr.is_null() {
+        return -1;
+    }
+    let src = std::slice::from_raw_parts(src_ptr, src_len);
+    match crate::dxt::dxt_merge(src) {
+        Ok(raw) => {
+            if raw.len() > dst_cap {
+                return -2;
+            }
+            std::ptr::copy_nonoverlapping(raw.as_ptr(), dst_ptr, raw.len());
+            raw.len() as i64
+        }
+        Err(_) => -2,
+    }
+}
+
 #[repr(C)]
 pub struct CVxlzCompressDesc {
     pub src_ptr: *const u8,

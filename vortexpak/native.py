@@ -272,6 +272,36 @@ if IS_NATIVE_AVAILABLE and _lib is not None:
     ]
     _lib.vxlz_decompress_c.restype = ctypes.c_int64
 
+    _lib.vxcm_compress_c.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_uint32,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _lib.vxcm_compress_c.restype = ctypes.c_int64
+    _lib.vxcm_decompress_c.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _lib.vxcm_decompress_c.restype = ctypes.c_int64
+    _lib.dxt_split_c.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _lib.dxt_split_c.restype = ctypes.c_int64
+    _lib.dxt_merge_c.argtypes = [
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+        ctypes.c_char_p,
+        ctypes.c_size_t,
+    ]
+    _lib.dxt_merge_c.restype = ctypes.c_int64
+
     class CVxlzCompressDesc(ctypes.Structure):
         _fields_ = [
             ("src_ptr", ctypes.c_char_p),
@@ -506,6 +536,8 @@ def native_decompress_block(
         return memoryview(folded.replace(token_byte, token_pattern))
     elif strategy_id == 8:
         return memoryview(native_vxlz_decompress(comp_payload, raw_size))
+    elif strategy_id == 11:
+        return memoryview(native_vxcm_decompress(comp_payload, raw_size))
     raise ValueError(f"Unknown block strategy: {strategy_id}")
 
 
@@ -682,7 +714,11 @@ def native_decode_archive_parallel(
                     payload = bytes(mv_big[src_start : src_start + e.length_in_block])
                 if materialize_full_rgba:
                     level0 = gpu_level0(
-                        payload, e.tx_shape[1], e.tx_shape[0], fmt, bool(e.tx_flags & 16)
+                        payload,
+                        e.tx_shape[1],
+                        e.tx_shape[0],
+                        fmt,
+                        bool(e.tx_flags & 16),
                     )
                     rgba = decode_bcn(level0, e.tx_shape[1], e.tx_shape[0], fmt)
                     results[e.rel_path] = np.frombuffer(rgba, dtype=np.uint8).reshape(
@@ -714,6 +750,16 @@ def native_decode_archive_parallel(
                 results[e.rel_path] = np.frombuffer(payload, dtype=np.uint8).reshape(
                     work_shape
                 )
+        elif e.tx_flags & (1 << 6):  # TX_DXT_SPLIT
+            if e.stripe_spans:
+                rec = b"".join(
+                    mv_big[block_offsets[b] + o : block_offsets[b] + o + ln]
+                    for b, o, ln in e.stripe_spans
+                )
+            else:
+                start_off = block_offsets[e.block_id] + e.offset_in_block
+                rec = bytes(mv_big[start_off : start_off + e.length_in_block])
+            results[e.rel_path] = native_dxt_merge(rec)
         elif e.stripe_spans:
             # Consecutive stripes in `big_buf` are already contiguous in memory!
             b0, off0, _ = e.stripe_spans[0]
@@ -796,6 +842,124 @@ def native_calculate_image_psnr(orig: bytes, quant: bytes) -> float:
     if mse < 1e-12:
         return 100.0
     return float(10.0 * math.log10(255.0 * 255.0 / mse))
+
+
+def native_vxcm_compress(raw: bytes, level: int = 9) -> bytes:
+    """Compress using the native VXCM context modeller."""
+    if not IS_NATIVE_AVAILABLE or _lib is None:
+        raise RuntimeError("VXCM compression needs the native core")
+    dst_cap = len(raw) + len(raw) // 8 + 4096
+    out = ctypes.create_string_buffer(dst_cap)
+    written = _lib.vxcm_compress_c(raw, len(raw), level, out, dst_cap)
+    if written <= 0 or written > dst_cap:
+        raise RuntimeError("VXCM compression failed")
+    return out.raw[:written]
+
+
+def native_vxcm_decompress(comp: bytes, raw_size: int) -> bytes:
+    """Decompress a VXCM stream into exactly raw_size bytes."""
+    if not IS_NATIVE_AVAILABLE or _lib is None:
+        raise RuntimeError("VXCM decompression needs the native core")
+    if raw_size < 0:
+        raise RuntimeError("VXCM decompression failed")
+    out = ctypes.create_string_buffer(max(raw_size, 1))
+    written = _lib.vxcm_decompress_c(comp, len(comp), out, raw_size)
+    if written != raw_size:
+        raise RuntimeError("VXCM decompression failed")
+    return out.raw[:raw_size]
+
+
+def _py_dxt_split(raw: bytes) -> Optional[bytes]:
+    if len(raw) < 128 or raw[:4] != b"DDS " or raw[4:8] != b"\x7c\x00\x00\x00":
+        return None
+    kind = {b"DXT1": 1, b"DXT2": 3, b"DXT3": 3, b"DXT4": 5, b"DXT5": 5}.get(raw[84:88])
+    if kind is None:
+        return None
+    bs = 8 if kind == 1 else 16
+    count, tail_len = divmod(len(raw) - 128, bs)
+    if count > 0xFFFFFFFF:
+        return None
+    blocks = np.frombuffer(raw, dtype=np.uint8, count=count * bs, offset=128).reshape(
+        count, bs
+    )
+    fields = [blocks[:, bs - 8 : bs - 4].tobytes(), blocks[:, bs - 4 :].tobytes()]
+    if kind == 3:
+        fields.append(blocks[:, :8].tobytes())
+    elif kind == 5:
+        fields.extend((blocks[:, :2].tobytes(), blocks[:, 2:8].tobytes()))
+    tail = raw[128 + count * bs :]
+    return (
+        b"VXD1"
+        + bytes([kind])
+        + count.to_bytes(4, "little")
+        + bytes([tail_len])
+        + raw[:128]
+        + b"".join(fields)
+        + tail
+    )
+
+
+def _py_dxt_merge(rec: bytes) -> bytes:
+    if len(rec) < 138 or rec[:4] != b"VXD1":
+        raise ValueError("Invalid DXT record")
+    kind = rec[4]
+    if kind not in (1, 3, 5):
+        raise ValueError("Invalid DXT record kind")
+    header_kind = {b"DXT1": 1, b"DXT2": 3, b"DXT3": 3, b"DXT4": 5, b"DXT5": 5}.get(
+        rec[94:98]
+    )
+    if header_kind != kind:
+        raise ValueError("DXT header fourCC does not match record kind")
+    bs = 8 if kind == 1 else 16
+    count = int.from_bytes(rec[5:9], "little")
+    tail_len = rec[9]
+    if tail_len >= bs or len(rec) != 138 + count * bs + tail_len:
+        raise ValueError("Invalid DXT record length")
+    blocks = np.empty((count, bs), dtype=np.uint8)
+    indices = 138 + 4 * count
+    alpha = 138 + 8 * count
+    blocks[:, bs - 8 : bs - 4] = np.frombuffer(
+        rec, dtype=np.uint8, count=4 * count, offset=138
+    ).reshape(count, 4)
+    blocks[:, bs - 4 :] = np.frombuffer(
+        rec, dtype=np.uint8, count=4 * count, offset=indices
+    ).reshape(count, 4)
+    if kind == 3:
+        blocks[:, :8] = np.frombuffer(
+            rec, dtype=np.uint8, count=8 * count, offset=alpha
+        ).reshape(count, 8)
+    elif kind == 5:
+        blocks[:, :2] = np.frombuffer(
+            rec, dtype=np.uint8, count=2 * count, offset=alpha
+        ).reshape(count, 2)
+        blocks[:, 2:8] = np.frombuffer(
+            rec, dtype=np.uint8, count=6 * count, offset=alpha + 2 * count
+        ).reshape(count, 6)
+    return rec[10:138] + blocks.tobytes() + rec[138 + count * bs :]
+
+
+def native_dxt_split(raw: bytes) -> Optional[bytes]:
+    if not IS_NATIVE_AVAILABLE or _lib is None:
+        return _py_dxt_split(raw)
+    dst_cap = len(raw) + 10
+    out = ctypes.create_string_buffer(dst_cap)
+    written = _lib.dxt_split_c(raw, len(raw), out, dst_cap)
+    if written == 0:
+        return None
+    if written != dst_cap:
+        raise RuntimeError("DXT split failed")
+    return out.raw[:written]
+
+
+def native_dxt_merge(rec: bytes) -> bytes:
+    if not IS_NATIVE_AVAILABLE or _lib is None:
+        return _py_dxt_merge(rec)
+    dst_cap = max(len(rec) - 10, 0)
+    out = ctypes.create_string_buffer(max(dst_cap, 1))
+    written = _lib.dxt_merge_c(rec, len(rec), out, dst_cap)
+    if written < 0 or written != dst_cap:
+        raise ValueError("Invalid DXT record")
+    return out.raw[:written]
 
 
 def native_vxlz_compress(raw_bytes: bytes) -> bytes:

@@ -57,6 +57,10 @@ from .native import (
     native_vxlz_compress,
     native_vxlz_compress_blocks_parallel,
     native_vxlz_decompress,
+    native_vxcm_compress,
+    native_vxcm_decompress,
+    native_dxt_split,
+    native_dxt_merge,
 )
 from .bcn import (
     GPU_FORMAT_IDS,
@@ -105,7 +109,8 @@ STRAT_VXLZ = 8
 STRAT_ZSTD6_DICT = 9  # zstd-6 frame, seeded with the lane's trained dictionary block
 STRAT_ZSTD19_DICT = 10  # zstd-19 frame, seeded with the lane's trained dictionary block
 _DICT_STRATEGIES = frozenset((STRAT_ZSTD6_DICT, STRAT_ZSTD19_DICT))
-_VALID_STRATEGY_IDS = frozenset(range(STRAT_ZSTD19_DICT + 1))
+STRAT_VXCM = 11
+_VALID_STRATEGY_IDS = frozenset(range(STRAT_VXCM + 1))
 
 # Lane-dictionary RDSO: repetitive text lanes (JSON/XML/shaders/configs) get a
 # dictionary trained on the lane's own content, stored ONCE as a block; every
@@ -121,6 +126,7 @@ DICT_MAX_SAMPLES = 2000
 # VFS seek granularity: one random read decompresses at most ~this much.
 # Cold-read p99 budget fix: lanes/stipes cap block size instead of block count.
 TARGET_BLOCK_BYTES = 2 * 1024 * 1024
+COMPACT_BLOCK_BYTES = 16 * 1024 * 1024
 # layout="stream": assets >= STREAM_ISOLATE_BYTES get their own block(s) and
 # smaller ones share ~STREAM_BLOCK_BYTES blocks, bounding the bytes decoded per
 # random read. Costs some ratio (cross-asset context); layout="compact" keeps it.
@@ -135,6 +141,7 @@ TX_PLANAR_CHW = 1 << 2
 TX_BCN = 1 << 3  # payload is GPU block data (BC1/BC4/BC5/BC7/BCX), see vortexpak/bcn.py
 TX_MIPS = 1 << 4  # TX_BCN payload holds a full mip chain (bcn.mip_dims), largest first
 TX_SRGB = 1 << 5  # TX_BCN color texture: sample as sRGB (DXGI *_UNORM_SRGB)
+TX_DXT_SPLIT = 1 << 6
 
 
 @dataclass
@@ -476,8 +483,16 @@ def _compress_block_rdso(
       - 'hybrid': evaluates proprietary VXLZ-ANS alongside Zstd candidates
       - 'zstd': evaluates Zstd (3, 6, 12, 19) candidates
     """
-    if not raw_bytes:
+    if not raw_bytes and entropy_backend != "vxcm":
         return MicroBlock(block_id, lane_name, STRAT_RAW_BYPASS, 0, b"")
+
+    if entropy_backend == "vxcm":
+        comp = native_vxcm_compress(raw_bytes, 9)
+        if allow_bypass and len(comp) >= len(raw_bytes) * 0.992:
+            return MicroBlock(
+                block_id, lane_name, STRAT_RAW_BYPASS, len(raw_bytes), raw_bytes
+            )
+        return MicroBlock(block_id, lane_name, STRAT_VXCM, len(raw_bytes), comp)
 
     if entropy_backend == "vxlz":
         comp_vxlz = native_vxlz_compress(raw_bytes)
@@ -563,6 +578,12 @@ def _decompress_block(block: MicroBlock, dict_resolver=None) -> bytes:
             return folded.replace(block.token_byte, block.token_pattern)
         elif st == STRAT_VXLZ:
             return native_vxlz_decompress(block.compressed_payload, block.raw_size)
+        elif st == STRAT_VXCM:
+            if not IS_NATIVE_AVAILABLE:
+                raise VXPKError(
+                    f"block #{block.block_id} uses VXCM and needs the native core"
+                )
+            return native_vxcm_decompress(block.compressed_payload, block.raw_size)
         else:
             raise ValueError(f"Unknown block strategy: {st}")
     except VXPKError:
@@ -867,13 +888,23 @@ def _encode_texture_gpu(
             lh, lw = level.shape[0], level.shape[1]
             lb = encode_bcn(level.tobytes(), lw, lh, fmt)
             ld = np.frombuffer(decode_bcn(lb, lw, lh, fmt), dtype=np.uint8)
-            mip_psnr.append(_texture_quality(level, ld.reshape(lh, lw, channels))["color_psnr_db"])
+            mip_psnr.append(
+                _texture_quality(level, ld.reshape(lh, lw, channels))["color_psnr_db"]
+            )
             parts.append(lb)
         finite = [p for p in mip_psnr if p is not None]
         quality["mip_min_color_psnr_db"] = min(finite) if finite else None
         flags = TX_BCN | (TX_SRGB if srgb else 0) | (TX_MIPS if len(parts) > 1 else 0)
         ratio = round(src.nbytes / max(len(blocks), 1), 2)
-        return (flags, (h, w, channels), cand.upper(), b"".join(parts), dec, ratio, quality)
+        return (
+            flags,
+            (h, w, channels),
+            cand.upper(),
+            b"".join(parts),
+            dec,
+            ratio,
+            quality,
+        )
     return "below_floor"
 
 
@@ -1047,7 +1078,7 @@ class VortexPakCodec:
         rdo: bool = False,
         rdo_level: str = "balanced",
         max_workers: int = 8,
-        entropy_backend: str = "vxlz",
+        entropy_backend: str = "auto",
         gpu: str = "none",
         gpu_min_psnr_db: float = GPU_MIN_PSNR_DB,
         layout: str = "stream",
@@ -1063,8 +1094,14 @@ class VortexPakCodec:
             )
         if not 0.0 < gpu_min_psnr_db <= 100.0:
             raise ValueError("gpu_min_psnr_db must be in (0, 100]")
-        if entropy_backend not in ("vxlz", "hybrid", "zstd"):
-            raise ValueError("entropy_backend must be 'vxlz', 'hybrid', or 'zstd'")
+        if entropy_backend not in ("auto", "vxcm", "vxlz", "hybrid", "zstd"):
+            raise ValueError(
+                "entropy_backend must be 'auto', 'vxcm', 'vxlz', 'hybrid', or 'zstd'"
+            )
+        if entropy_backend == "auto":
+            entropy_backend = (
+                "vxcm" if layout == "compact" and IS_NATIVE_AVAILABLE else "vxlz"
+            )
         if gpu not in ("none", "bc1", "bc5", "bc7", "bcx", "auto"):
             raise ValueError("gpu must be 'none', 'bc1', 'bc5', 'bc7', or 'auto'")
         self.mode = mode
@@ -1080,7 +1117,11 @@ class VortexPakCodec:
         self.last_rdo_metrics: Dict[str, Any] = {}
 
     def _lane_split(
-        self, items: List[Tuple[AssetEntry, bytes]], n_chunks: int, prefix: str, bid: int
+        self,
+        items: List[Tuple[AssetEntry, bytes]],
+        n_chunks: int,
+        prefix: str,
+        bid: int,
     ) -> Tuple[List[Tuple[int, str, bytes]], int]:
         if self.layout == "stream":
             return _split_into_parallel_buffers(
@@ -1090,6 +1131,10 @@ class VortexPakCodec:
                 bid,
                 isolate_bytes=STREAM_ISOLATE_BYTES,
                 block_bytes=STREAM_BLOCK_BYTES,
+            )
+        if self.entropy_backend == "vxcm":
+            return _split_into_parallel_buffers(
+                items, 1, prefix, bid, block_bytes=COMPACT_BLOCK_BYTES
             )
         return _split_into_parallel_buffers(items, n_chunks, prefix, bid)
 
@@ -1108,6 +1153,11 @@ class VortexPakCodec:
 
     def encode_files(self, file_tuples: List[Tuple[str, bytes]]) -> VortexArchive:
         entries: List[AssetEntry] = []
+        seen_raw: Dict[Tuple[int, int], List[Tuple[bytes, AssetEntry]]] = {}
+        duplicates: List[Tuple[AssetEntry, AssetEntry]] = []
+        dedup_bytes = 0
+        compact_vxcm = self.layout == "compact" and self.entropy_backend == "vxcm"
+        stripe_bytes = COMPACT_BLOCK_BYTES if compact_vxcm else TARGET_BLOCK_BYTES
 
         # High-speed zero-copy lanes
         lane_textures: List[Tuple[AssetEntry, bytes]] = []
@@ -1150,12 +1200,23 @@ class VortexPakCodec:
 
             def _gpu_job(item: Tuple[str, bytes]) -> Tuple[str, Any]:
                 rel, raw = item
-                res = _encode_texture_gpu(raw, self.gpu, self.gpu_min_psnr_db, self.mips)
+                res = _encode_texture_gpu(
+                    raw, self.gpu, self.gpu_min_psnr_db, self.mips
+                )
                 if isinstance(res, str):
                     return rel, res
                 flags, shape, mode, payload, dec, ratio, quality = res
                 digest = xxhash.xxh3_64_intdigest(dec)
-                return rel, (flags, shape, mode, payload, dec.nbytes, digest, ratio, quality)
+                return rel, (
+                    flags,
+                    shape,
+                    mode,
+                    payload,
+                    dec.nbytes,
+                    digest,
+                    ratio,
+                    quality,
+                )
 
             images = [
                 item
@@ -1254,6 +1315,23 @@ class VortexPakCodec:
                 lane_textures.append((entry, payload))
                 continue
 
+            original_raw = raw_bytes
+            dedup_key = (len(raw_bytes), xxhash.xxh3_128_intdigest(raw_bytes))
+            first_copy = next(
+                (
+                    prior
+                    for data, prior in seen_raw.get(dedup_key, [])
+                    if data == raw_bytes
+                ),
+                None,
+            )
+            if first_copy is not None:
+                entry = AssetEntry(rel_path, ext, first_copy.raw_size, first_copy.xxh64)
+                entries.append(entry)
+                duplicates.append((entry, first_copy))
+                dedup_bytes += len(raw_bytes)
+                continue
+
             # Perceptual RDO for 3D model geometry and strict mode PNGs
             if self.rdo:
                 if ext == ".glb":
@@ -1287,6 +1365,12 @@ class VortexPakCodec:
                 is_texture_tensor=False,
             )
             entries.append(entry)
+            seen_raw.setdefault(dedup_key, []).append((original_raw, entry))
+            if ext == ".dds":
+                rec = native_dxt_split(raw_bytes)
+                if rec is not None:
+                    raw_bytes = rec
+                    entry.tx_flags |= TX_DXT_SPLIT
 
             if ext in (".ogg", ".mp3", ".jpg", ".jpeg", ".fla"):
                 lane_media.append((entry, raw_bytes))
@@ -1315,7 +1399,9 @@ class VortexPakCodec:
             for entry, payload in lane_textures:
                 if len(payload) >= 4_000_000:
                     # Stripe massive 4K texture payloads across parallel micro-blocks
-                    n_stripes = max(4, -(-len(payload) // TARGET_BLOCK_BYTES))
+                    n_stripes = max(
+                        1 if compact_vxcm else 4, -(-len(payload) // stripe_bytes)
+                    )
                     step = (len(payload) + n_stripes - 1) // n_stripes
                     spans: List[Tuple[int, int, int]] = []
                     first_bid = next_bid
@@ -1350,7 +1436,7 @@ class VortexPakCodec:
 
         # Stripe ultra-large map files (>= 8 MB, e.g. 67 MB map.tmx) across 8 parallel blocks
         for entry, raw_b in lane_maps_large:
-            n_stripes = max(8, -(-len(raw_b) // TARGET_BLOCK_BYTES))
+            n_stripes = max(1 if compact_vxcm else 8, -(-len(raw_b) // stripe_bytes))
             step = (len(raw_b) + n_stripes - 1) // n_stripes
             spans = []
             for s_idx in range(n_stripes):
@@ -1372,15 +1458,23 @@ class VortexPakCodec:
             (lane_media, "LANE_MEDIA", 4),
         ]:
             if lane_items:
-                rbs, next_bid = self._lane_split(
-                    lane_items, n_chk, lane_name, next_bid
-                )
+                rbs, next_bid = self._lane_split(lane_items, n_chk, lane_name, next_bid)
                 raw_blocks_to_compress.extend(rbs)
 
+        for entry, first_copy in duplicates:
+            entry.block_id = first_copy.block_id
+            entry.offset_in_block = first_copy.offset_in_block
+            entry.length_in_block = first_copy.length_in_block
+            entry.stripe_spans = list(first_copy.stripe_spans)
+            entry.tx_flags = first_copy.tx_flags
+
         lane_groups: Dict[str, List[Tuple[int, bytes]]] = {}
-        for bid, lname, bdata in raw_blocks_to_compress:
-            if lname.startswith(DICT_LANES):
-                lane_groups.setdefault(lname.rsplit("_", 1)[0], []).append((bid, bdata))
+        if self.entropy_backend != "vxcm":
+            for bid, lname, bdata in raw_blocks_to_compress:
+                if lname.startswith(DICT_LANES):
+                    lane_groups.setdefault(lname.rsplit("_", 1)[0], []).append(
+                        (bid, bdata)
+                    )
 
         if self.entropy_backend == "vxlz" and IS_NATIVE_AVAILABLE:
             vxlz_res = native_vxlz_compress_blocks_parallel(
@@ -1415,7 +1509,8 @@ class VortexPakCodec:
             blocks = list(self._pool.map(_compress_one, raw_blocks_to_compress))
 
         blocks.sort(key=lambda b: b.block_id)
-        blocks = _apply_lane_dictionaries(blocks, lane_groups, _lane_file_samples)
+        if self.entropy_backend != "vxcm":
+            blocks = _apply_lane_dictionaries(blocks, lane_groups, _lane_file_samples)
 
         all_psnrs = tex_psnrs + geom_psnrs
         if self.rdo and (all_psnrs or total_tex_samples > 0):
@@ -1502,6 +1597,10 @@ class VortexPakCodec:
                 }
             )
 
+        self.last_rdo_metrics.update(
+            dedup_files=len(duplicates), dedup_bytes=dedup_bytes
+        )
+
         return VortexArchive(
             mode=self.mode,
             entries=entries,
@@ -1557,7 +1656,14 @@ class VortexPakCodec:
 
         for e in archive.entries:
             if e.stripe_spans and not e.is_texture_tensor:
-                if not materialize_full_rgba:
+                if e.tx_flags & TX_DXT_SPLIT:
+                    results[e.rel_path] = native_dxt_merge(
+                        b"".join(
+                            block_views[bid][off : off + ln]
+                            for bid, off, ln in e.stripe_spans
+                        )
+                    )
+                elif not materialize_full_rgba:
                     results[e.rel_path] = tuple(
                         block_views[bid][off : off + ln]
                         for bid, off, ln in e.stripe_spans
@@ -1587,6 +1693,8 @@ class VortexPakCodec:
                     materialize_full_rgba=materialize_full_rgba,
                     tx_mode=e.tx_mode,
                 )
+            elif e.tx_flags & TX_DXT_SPLIT:
+                results[e.rel_path] = native_dxt_merge(bytes(mv))
             elif e.aux_block_id >= 0:
                 meta_bytes = bytes(mv)
                 idat_mv = block_views[e.aux_block_id][
